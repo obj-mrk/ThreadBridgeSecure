@@ -3,6 +3,8 @@ package mrk.bootstrap;
 import com.sun.net.httpserver.HttpServer;
 import mrk.config.AppConfig;
 import mrk.http.HttpServerFactory;
+import mrk.infrastrucure.jdbc.ConnectionFactory;
+import mrk.infrastrucure.jdbc.DatabaseHealthChecker;
 
 import java.io.IOException;
 
@@ -17,6 +19,9 @@ public class DependencyFactory {
         HttpServerFactory httpServerFactory = new HttpServerFactory(appConfig);
         HttpServer httpServer = httpServerFactory.create();
 
-        return new Application(httpServer);
+        ConnectionFactory connectionFactory = new ConnectionFactory(appConfig);
+        DatabaseHealthChecker databaseHealthChecker = new DatabaseHealthChecker(connectionFactory);
+
+        return new Application(httpServer, databaseHealthChecker);
     }
 }
