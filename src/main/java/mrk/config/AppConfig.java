@@ -11,6 +11,8 @@ public class AppConfig {
     private final String databaseUser = "threadbridge_user";
     private final String databasePassword = "threadbridge_password";
 
+    private final int httpWorkerThreads = 8;
+
     public String getApplicationName() {
         return applicationName;
     }
@@ -37,5 +39,9 @@ public class AppConfig {
 
     public String getDatabasePassword() {
         return databasePassword;
+    }
+
+    public int getHttpWorkerThreads() {
+        return httpWorkerThreads;
     }
 }

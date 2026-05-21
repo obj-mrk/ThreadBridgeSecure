@@ -1,4 +1,4 @@
-package mrk.infrastrucure.jdbc;
+package mrk.infrastructure.jdbc;
 
 import mrk.config.AppConfig;
 

@@ -1,7 +1,7 @@
 package mrk.bootstrap;
 
 import com.sun.net.httpserver.HttpServer;
-import mrk.infrastrucure.jdbc.DatabaseHealthChecker;
+import mrk.infrastructure.jdbc.DatabaseHealthChecker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
