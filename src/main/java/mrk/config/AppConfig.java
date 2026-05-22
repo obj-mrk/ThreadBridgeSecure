@@ -12,6 +12,10 @@ public class AppConfig {
     private final String databasePassword = "threadbridge_password";
 
     private final int httpWorkerThreads = 8;
+    
+    private final int maxSecureMessageLength = 10_000;
+    private final int minMessageTtlSeconds = 60;
+    private final int maxMessageTtlSeconds = 86_400;
 
     public String getApplicationName() {
         return applicationName;
@@ -43,5 +47,17 @@ public class AppConfig {
 
     public int getHttpWorkerThreads() {
         return httpWorkerThreads;
+    }
+
+    public int getMaxSecureMessageLength() {
+        return maxSecureMessageLength;
+    }
+
+    public int getMinMessageTtlSeconds() {
+        return minMessageTtlSeconds;
+    }
+
+    public int getMaxMessageTtlSeconds() {
+        return maxMessageTtlSeconds;
     }
 }
