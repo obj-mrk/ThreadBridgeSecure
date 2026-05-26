@@ -70,9 +70,6 @@ public class UserKeyHandler extends BaseHttpHandler {
     private long extractUserId(String path) {
         String[] parts = path.split("/");
 
-        // Expected:
-        // /users/{id}/keys
-        // split -> ["", "users", "{id}", "keys"]
         if (parts.length != 4 || !"users".equals(parts[1]) || !"keys".equals(parts[3])) {
             throw new ValidationException("Expected path: /users/{id}/keys");
         }
