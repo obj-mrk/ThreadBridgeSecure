@@ -21,6 +21,11 @@ public class AppConfig {
     private final int inboundPollBatchSize = 10;
     private final long inboundPollDelayMillis = 1_000;
 
+    private final int outboxWorkerThreads = 2;
+    private final int outboxPollBatchSize = 10;
+    private final int outboxPollDelayMillis = 1_000;
+
+
     public String getApplicationName() {
         return applicationName;
     }
@@ -75,5 +80,17 @@ public class AppConfig {
 
     public long getInboundPollDelayMillis() {
         return inboundPollDelayMillis;
+    }
+
+    public int getOutboxWorkerThreads() {
+        return outboxWorkerThreads;
+    }
+
+    public int getOutboxPollBatchSize() {
+        return outboxPollBatchSize;
+    }
+
+    public int getOutboxPollDelayMillis() {
+        return outboxPollDelayMillis;
     }
 }

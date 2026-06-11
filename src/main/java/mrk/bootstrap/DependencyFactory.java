@@ -15,13 +15,19 @@ import mrk.http.handler.UserKeyHandler;
 import mrk.infrastructure.crypto.JcaHybridEncryptionService;
 import mrk.infrastructure.crypto.JcaKeyManagementService;
 import mrk.infrastructure.crypto.RsaPemKeyParser;
+import mrk.infrastructure.event.EventDispatcher;
+import mrk.infrastructure.event.EventListener;
+import mrk.infrastructure.event.listener.SecureMessageEncryptedListener;
 import mrk.infrastructure.jdbc.*;
 import mrk.infrastructure.worker.CryptoWorkerPool;
 import mrk.infrastructure.worker.InboundSecureMessagePoller;
+import mrk.infrastructure.worker.OutboxEventPoller;
+import mrk.infrastructure.worker.OutboxEventWorkerPool;
 import mrk.utils.JsonUtils;
 import mrk.utils.KeyFingerprintCalculator;
 
 import java.io.IOException;
+import java.util.List;
 
 public class DependencyFactory {
     private final AppConfig appConfig;
@@ -33,8 +39,10 @@ public class DependencyFactory {
     public Application createApplication() throws IOException {
         ConnectionFactory connectionFactory = new ConnectionFactory(appConfig);
         DatabaseHealthChecker databaseHealthChecker = new DatabaseHealthChecker(connectionFactory);
+        JsonUtils jsonUtils = new JsonUtils();
 
         TransactionManager transactionManager = new JdbcTransactionManager(connectionFactory);
+
 
         UserRepository userRepository = new JdbcUserRepository();
         UserKeyRepository userKeyRepository = new JdbcUserKeyRepository();
@@ -43,6 +51,8 @@ public class DependencyFactory {
 
         SecureMessageRepository secureMessageRepository = new JdbcSecureMessageRepository();
         OutboxEventRepository outboxEventRepository = new JdbcOutboxEventRepository();
+
+        NotificationRepository notificationRepository = new JdbcNotificationRepository();
 
         KeyManagementService keyManagementService = new JcaKeyManagementService(
                 new RsaPemKeyParser()
@@ -97,7 +107,29 @@ public class DependencyFactory {
                 appConfig.getInboundPollDelayMillis()
         );
 
-        JsonUtils jsonUtils = new JsonUtils();
+        EventListener secureMessageEncryptedListener = new SecureMessageEncryptedListener(
+                notificationRepository,
+                jsonUtils
+        );
+
+        EventDispatcher eventDispatcher = new EventDispatcher(List.of(
+                secureMessageEncryptedListener
+        ));
+
+        OutboxEventWorkerPool outboxEventWorkerPool = new OutboxEventWorkerPool(
+                appConfig.getOutboxWorkerThreads(),
+                transactionManager,
+                outboxEventRepository,
+                eventDispatcher
+        );
+
+        OutboxEventPoller outboxEventPoller = new OutboxEventPoller(
+                transactionManager,
+                outboxEventRepository,
+                outboxEventWorkerPool,
+                appConfig.getOutboxPollBatchSize(),
+                appConfig.getOutboxPollDelayMillis()
+        );
 
         HealthHandler healthHandler = new HealthHandler();
         UserHandler userHandler = new UserHandler(jsonUtils, registerUserUseCase);
@@ -114,9 +146,13 @@ public class DependencyFactory {
 
         HttpServer httpServer = httpServerFactory.create();
 
-        return new Application(httpServer,
+        return new Application(
+                httpServer,
                 databaseHealthChecker,
                 inboundSecureMessagePoller,
-                cryptoWorkerPool);
+                cryptoWorkerPool,
+                outboxEventPoller,
+                outboxEventWorkerPool
+        );
     }
 }

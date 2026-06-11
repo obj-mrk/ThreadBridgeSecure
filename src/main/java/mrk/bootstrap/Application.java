@@ -4,6 +4,8 @@ import com.sun.net.httpserver.HttpServer;
 import mrk.infrastructure.jdbc.DatabaseHealthChecker;
 import mrk.infrastructure.worker.CryptoWorkerPool;
 import mrk.infrastructure.worker.InboundSecureMessagePoller;
+import mrk.infrastructure.worker.OutboxEventPoller;
+import mrk.infrastructure.worker.OutboxEventWorkerPool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,17 +16,23 @@ public class Application {
     private final DatabaseHealthChecker databaseHealthChecker;
     private final InboundSecureMessagePoller inboundSecureMessagePoller;
     private final CryptoWorkerPool cryptoWorkerPool;
+    private final OutboxEventPoller outboxEventPoller;
+    private final OutboxEventWorkerPool outboxEventWorkerPool;
 
     public Application(
             HttpServer server,
             DatabaseHealthChecker databaseHealthChecker,
             InboundSecureMessagePoller inboundSecureMessagePoller,
-            CryptoWorkerPool cryptoWorkerPool
+            CryptoWorkerPool cryptoWorkerPool,
+            OutboxEventPoller outboxEventPoller,
+            OutboxEventWorkerPool outboxEventWorkerPool
     ) {
         this.server = server;
         this.databaseHealthChecker = databaseHealthChecker;
         this.inboundSecureMessagePoller = inboundSecureMessagePoller;
         this.cryptoWorkerPool = cryptoWorkerPool;
+        this.outboxEventPoller = outboxEventPoller;
+        this.outboxEventWorkerPool = outboxEventWorkerPool;
     }
 
     public void start() {
@@ -37,17 +45,18 @@ public class Application {
         inboundSecureMessagePoller.start();
         log.info("Inbound secure message poller started");
 
+        outboxEventPoller.start();
+        log.info("Outbox event poller started");
+
         server.start();
         log.info("HTTP server started");
     }
 
     public void stop() {
-        // Порядок важен:
-        // 1. перестаём принимать HTTP;
-        // 2. перестаём claim-ить новые inbound задачи;
-        // 3. ждём завершения уже принятых crypto задач.
         server.stop(1);
         inboundSecureMessagePoller.close();
+        outboxEventPoller.close();
         cryptoWorkerPool.close();
+        outboxEventWorkerPool.close();
     }
 }

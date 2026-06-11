@@ -96,3 +96,6 @@ CREATE INDEX ix_notifications_user_status
 
 CREATE INDEX ix_outbox_status_created_at
     ON outbox_events(status, created_at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_notifications_secure_message_type
+    ON notifications(secure_message_id, type);
