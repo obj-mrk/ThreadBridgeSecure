@@ -2,16 +2,10 @@ package mrk.bootstrap;
 
 import com.sun.net.httpserver.HttpServer;
 import mrk.application.port.*;
-import mrk.application.usecase.AcceptSecureMessageUseCase;
-import mrk.application.usecase.ProcessSecureMessageUseCase;
-import mrk.application.usecase.RegisterUserKeyUseCase;
-import mrk.application.usecase.RegisterUserUseCase;
+import mrk.application.usecase.*;
 import mrk.config.AppConfig;
 import mrk.http.HttpServerFactory;
-import mrk.http.handler.HealthHandler;
-import mrk.http.handler.SecureMessageWebhookHandler;
-import mrk.http.handler.UserHandler;
-import mrk.http.handler.UserKeyHandler;
+import mrk.http.handler.*;
 import mrk.infrastructure.crypto.JcaHybridEncryptionService;
 import mrk.infrastructure.crypto.JcaKeyManagementService;
 import mrk.infrastructure.crypto.RsaPemKeyParser;
@@ -94,6 +88,19 @@ public class DependencyFactory {
                 hybridEncryptionService
         );
 
+        GetSecureInboxUseCase getSecureInboxUseCase = new GetSecureInboxUseCase(
+                transactionManager,
+                secureMessageRepository
+        );
+
+        DecryptSecureMessageUseCase decryptSecureMessageUseCase = new DecryptSecureMessageUseCase(
+                transactionManager,
+                secureMessageRepository,
+                userKeyRepository,
+                keyManagementService,
+                hybridEncryptionService
+        );
+
         CryptoWorkerPool cryptoWorkerPool = new CryptoWorkerPool(
                 appConfig.getCryptoWorkerThreads(),
                 processSecureMessageUseCase
@@ -132,16 +139,36 @@ public class DependencyFactory {
         );
 
         HealthHandler healthHandler = new HealthHandler();
-        UserHandler userHandler = new UserHandler(jsonUtils, registerUserUseCase);
-        UserKeyHandler userKeyHandler = new UserKeyHandler(jsonUtils, registerUserKeyUseCase);
-        SecureMessageWebhookHandler secureMessageWebhookHandler = new SecureMessageWebhookHandler(jsonUtils, acceptSecureMessageUseCase);
+        UserHandler userHandler = new UserHandler(
+                jsonUtils,
+                registerUserUseCase);
+
+        UserKeyHandler userKeyHandler = new UserKeyHandler(
+                jsonUtils,
+                registerUserKeyUseCase);
+
+        SecureMessageWebhookHandler secureMessageWebhookHandler = new SecureMessageWebhookHandler(
+                jsonUtils,
+                acceptSecureMessageUseCase);
+
+        SecureInboxHandler secureInboxHandler = new SecureInboxHandler(
+                jsonUtils,
+                getSecureInboxUseCase
+        );
+
+        DecryptSecureMessageHandler decryptSecureMessageHandler = new DecryptSecureMessageHandler(
+                jsonUtils,
+                decryptSecureMessageUseCase
+        );
 
         HttpServerFactory httpServerFactory = new HttpServerFactory(
                 appConfig,
                 healthHandler,
                 userHandler,
                 userKeyHandler,
-                secureMessageWebhookHandler
+                secureMessageWebhookHandler,
+                secureInboxHandler,
+                decryptSecureMessageHandler
         );
 
         HttpServer httpServer = httpServerFactory.create();

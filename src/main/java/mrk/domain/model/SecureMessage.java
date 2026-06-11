@@ -50,6 +50,32 @@ public class SecureMessage {
         return message;
     }
 
+    public boolean isReadable() {
+        return status == SecureMessageStatus.ENCRYPTED || status == SecureMessageStatus.DELIVERED;
+    }
+
+    public boolean isExpired(LocalDateTime now) {
+        return expiresAt != null && !expiresAt.isAfter(now);
+    }
+
+    public void markRead(LocalDateTime readAt) {
+        if (!isReadable()) {
+            throw new IllegalStateException("Only readable message can be marked as READ");
+        }
+
+        this.status = SecureMessageStatus.READ;
+        this.readAt = readAt;
+    }
+
+    public void markDestroyed(LocalDateTime destroyedAt) {
+        if (this.status == SecureMessageStatus.DESTROYED) {
+            return;
+        }
+
+        this.status = SecureMessageStatus.DESTROYED;
+        this.destroyedAt = destroyedAt;
+    }
+
     public Long getId() {
         return id;
     }

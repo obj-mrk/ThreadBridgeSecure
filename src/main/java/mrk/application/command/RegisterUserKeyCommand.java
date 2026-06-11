@@ -1,16 +1,20 @@
 package mrk.application.command;
 
 public class RegisterUserKeyCommand {
-    private long userId;
-    private String publicKeyPem;
-    private String algorithm;
+    private final long userId;
+    private final String publicKeyPem;
+    private final String privateKeyPem;
+    private final String algorithm;
 
-    public RegisterUserKeyCommand() {
-    }
-
-    public RegisterUserKeyCommand(long userId, String publicKeyPem, String algorithm) {
+    public RegisterUserKeyCommand(
+            long userId,
+            String publicKeyPem,
+            String privateKeyPem,
+            String algorithm
+    ) {
         this.userId = userId;
         this.publicKeyPem = publicKeyPem;
+        this.privateKeyPem = privateKeyPem;
         this.algorithm = algorithm;
     }
 
@@ -20,6 +24,10 @@ public class RegisterUserKeyCommand {
 
     public String getPublicKeyPem() {
         return publicKeyPem;
+    }
+
+    public String getPrivateKeyPem() {
+        return privateKeyPem;
     }
 
     public String getAlgorithm() {

@@ -40,6 +40,7 @@ public class UserKeyHandler extends BaseHttpHandler {
             RegisterUserKeyCommand command = new RegisterUserKeyCommand(
                     userId,
                     request.getPublicKeyPem(),
+                    request.getPrivateKeyPem(),
                     request.getAlgorithm()
             );
 

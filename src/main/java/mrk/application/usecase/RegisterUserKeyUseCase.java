@@ -58,7 +58,7 @@ public class RegisterUserKeyUseCase {
             UserKey userKey = new UserKey();
             userKey.setUserId(command.getUserId());
             userKey.setPublicKeyPem(command.getPublicKeyPem().trim());
-            userKey.setEncryptedPrivateKeyPem(null);
+            userKey.setEncryptedPrivateKeyPem(command.getPrivateKeyPem().trim());
             userKey.setKeyFingerprint(fingerprint);
             userKey.setAlgorithm(command.getAlgorithm().trim());
             userKey.setStatus(UserKeyStatus.ACTIVE);
@@ -93,6 +93,14 @@ public class RegisterUserKeyUseCase {
 
         if (!command.getPublicKeyPem().contains("BEGIN PUBLIC KEY")) {
             throw new ValidationException("Public key must be PEM encoded");
+        }
+
+        if (command.getPrivateKeyPem() == null || command.getPrivateKeyPem().isBlank()) {
+            throw new ValidationException("Private key must not be blank");
+        }
+
+        if (!command.getPrivateKeyPem().contains("BEGIN PRIVATE KEY")) {
+            throw new ValidationException("Private key must be PEM encoded");
         }
 
         if (command.getAlgorithm() == null || command.getAlgorithm().isBlank()) {

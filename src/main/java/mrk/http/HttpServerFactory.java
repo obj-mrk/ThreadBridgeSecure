@@ -2,10 +2,7 @@ package mrk.http;
 
 import com.sun.net.httpserver.HttpServer;
 import mrk.config.AppConfig;
-import mrk.http.handler.HealthHandler;
-import mrk.http.handler.SecureMessageWebhookHandler;
-import mrk.http.handler.UserHandler;
-import mrk.http.handler.UserKeyHandler;
+import mrk.http.handler.*;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -17,19 +14,25 @@ public class HttpServerFactory {
     private final UserHandler userHandler;
     private final UserKeyHandler userKeyHandler;
     private final SecureMessageWebhookHandler secureMessageWebhookHandler;
+    private final SecureInboxHandler secureInboxHandler;
+    private final DecryptSecureMessageHandler decryptSecureMessageHandler;
 
     public HttpServerFactory(
             AppConfig appConfig,
             HealthHandler healthHandler,
             UserHandler userHandler,
             UserKeyHandler userKeyHandler,
-            SecureMessageWebhookHandler secureMessageWebhookHandler
+            SecureMessageWebhookHandler secureMessageWebhookHandler,
+            SecureInboxHandler secureInboxHandler,
+            DecryptSecureMessageHandler decryptSecureMessageHandler
     ) {
         this.appConfig = appConfig;
         this.healthHandler = healthHandler;
         this.userHandler = userHandler;
         this.userKeyHandler = userKeyHandler;
         this.secureMessageWebhookHandler = secureMessageWebhookHandler;
+        this.secureInboxHandler = secureInboxHandler;
+        this.decryptSecureMessageHandler = decryptSecureMessageHandler;
     }
 
     public HttpServer create() throws IOException {
@@ -44,6 +47,9 @@ public class HttpServerFactory {
         server.createContext("/users", userHandler);
         server.createContext("/users/", userKeyHandler);
         server.createContext("/webhook/secure-messages", secureMessageWebhookHandler);
+
+        server.createContext("/me/secure-messages", secureInboxHandler);
+        server.createContext("/secure-messages/", decryptSecureMessageHandler);
 
         server.setExecutor(Executors.newFixedThreadPool(appConfig.getHttpWorkerThreads()));
 
