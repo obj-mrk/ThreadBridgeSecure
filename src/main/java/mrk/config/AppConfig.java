@@ -17,6 +17,10 @@ public class AppConfig {
     private final int minMessageTtlSeconds = 60;
     private final int maxMessageTtlSeconds = 86_400;
 
+    private final int cryptoWorkerThreads = 4;
+    private final int inboundPollBatchSize = 10;
+    private final long inboundPollDelayMillis = 1_000;
+
     public String getApplicationName() {
         return applicationName;
     }
@@ -59,5 +63,17 @@ public class AppConfig {
 
     public int getMaxMessageTtlSeconds() {
         return maxMessageTtlSeconds;
+    }
+
+    public int getCryptoWorkerThreads() {
+        return cryptoWorkerThreads;
+    }
+
+    public int getInboundPollBatchSize() {
+        return inboundPollBatchSize;
+    }
+
+    public long getInboundPollDelayMillis() {
+        return inboundPollDelayMillis;
     }
 }

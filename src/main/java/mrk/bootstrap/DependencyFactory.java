@@ -1,11 +1,9 @@
 package mrk.bootstrap;
 
 import com.sun.net.httpserver.HttpServer;
-import mrk.application.port.InboundSecureMessageRepository;
-import mrk.application.port.TransactionManager;
-import mrk.application.port.UserKeyRepository;
-import mrk.application.port.UserRepository;
+import mrk.application.port.*;
 import mrk.application.usecase.AcceptSecureMessageUseCase;
+import mrk.application.usecase.ProcessSecureMessageUseCase;
 import mrk.application.usecase.RegisterUserKeyUseCase;
 import mrk.application.usecase.RegisterUserUseCase;
 import mrk.config.AppConfig;
@@ -14,7 +12,12 @@ import mrk.http.handler.HealthHandler;
 import mrk.http.handler.SecureMessageWebhookHandler;
 import mrk.http.handler.UserHandler;
 import mrk.http.handler.UserKeyHandler;
+import mrk.infrastructure.crypto.JcaHybridEncryptionService;
+import mrk.infrastructure.crypto.JcaKeyManagementService;
+import mrk.infrastructure.crypto.RsaPemKeyParser;
 import mrk.infrastructure.jdbc.*;
+import mrk.infrastructure.worker.CryptoWorkerPool;
+import mrk.infrastructure.worker.InboundSecureMessagePoller;
 import mrk.utils.JsonUtils;
 import mrk.utils.KeyFingerprintCalculator;
 
@@ -37,6 +40,15 @@ public class DependencyFactory {
         UserKeyRepository userKeyRepository = new JdbcUserKeyRepository();
         InboundSecureMessageRepository inboundSecureMessageRepository =
                 new JdbcInboundSecureMessageRepository();
+
+        SecureMessageRepository secureMessageRepository = new JdbcSecureMessageRepository();
+        OutboxEventRepository outboxEventRepository = new JdbcOutboxEventRepository();
+
+        KeyManagementService keyManagementService = new JcaKeyManagementService(
+                new RsaPemKeyParser()
+        );
+
+        HybridEncryptionService hybridEncryptionService = new JcaHybridEncryptionService();
 
         KeyFingerprintCalculator keyFingerprintCalculator = new KeyFingerprintCalculator();
 
@@ -61,6 +73,30 @@ public class DependencyFactory {
                 appConfig.getMaxMessageTtlSeconds()
         );
 
+        ProcessSecureMessageUseCase processSecureMessageUseCase = new ProcessSecureMessageUseCase(
+                transactionManager,
+                inboundSecureMessageRepository,
+                secureMessageRepository,
+                outboxEventRepository,
+                userRepository,
+                userKeyRepository,
+                keyManagementService,
+                hybridEncryptionService
+        );
+
+        CryptoWorkerPool cryptoWorkerPool = new CryptoWorkerPool(
+                appConfig.getCryptoWorkerThreads(),
+                processSecureMessageUseCase
+        );
+
+        InboundSecureMessagePoller inboundSecureMessagePoller = new InboundSecureMessagePoller(
+                transactionManager,
+                inboundSecureMessageRepository,
+                cryptoWorkerPool,
+                appConfig.getInboundPollBatchSize(),
+                appConfig.getInboundPollDelayMillis()
+        );
+
         JsonUtils jsonUtils = new JsonUtils();
 
         HealthHandler healthHandler = new HealthHandler();
@@ -78,6 +114,9 @@ public class DependencyFactory {
 
         HttpServer httpServer = httpServerFactory.create();
 
-        return new Application(httpServer, databaseHealthChecker);
+        return new Application(httpServer,
+                databaseHealthChecker,
+                inboundSecureMessagePoller,
+                cryptoWorkerPool);
     }
 }

@@ -5,6 +5,9 @@ import mrk.domain.model.InboundSecureMessage;
 import mrk.domain.value.InboundMessageStatus;
 
 import java.sql.*;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 public class JdbcInboundSecureMessageRepository implements InboundSecureMessageRepository {
@@ -96,6 +99,118 @@ public class JdbcInboundSecureMessageRepository implements InboundSecureMessageR
             }
         } catch (SQLException exception) {
             throw new RuntimeException("Could not check inbound secure message existence", exception);
+        }
+    }
+    @Override
+    public List<InboundSecureMessage> claimReceivedBatch(Connection connection, int batchSize) {
+        String selectSql = """
+            SELECT *
+            FROM inbound_secure_messages
+            WHERE status = 'RECEIVED'
+            ORDER BY received_at
+            FOR UPDATE SKIP LOCKED
+            LIMIT ?
+            """;
+
+        String updateSql = """
+            UPDATE inbound_secure_messages
+            SET status = 'PROCESSING',
+                processing_started_at = CURRENT_TIMESTAMP,
+                failure_reason = NULL
+            WHERE id = ?
+            """;
+
+        try {
+            List<InboundSecureMessage> messages = new ArrayList<>();
+
+            try (PreparedStatement selectStatement = connection.prepareStatement(selectSql)) {
+                selectStatement.setInt(1, batchSize);
+
+                try (ResultSet resultSet = selectStatement.executeQuery()) {
+                    while (resultSet.next()) {
+                        messages.add(mapInboundSecureMessage(resultSet));
+                    }
+                }
+            }
+
+            // Claiming делаем в той же короткой транзакции, что и SELECT FOR UPDATE.
+            // После commit другие poller-ы уже не увидят эти строки как RECEIVED.
+            try (PreparedStatement updateStatement = connection.prepareStatement(updateSql)) {
+                for (InboundSecureMessage message : messages) {
+                    updateStatement.setLong(1, message.getId());
+                    updateStatement.addBatch();
+
+                    message.setStatus(InboundMessageStatus.PROCESSING);
+                    message.setProcessingStartedAt(LocalDateTime.now());
+                }
+
+                updateStatement.executeBatch();
+            }
+
+            return messages;
+        } catch (SQLException exception) {
+            throw new RuntimeException("Could not claim inbound secure messages", exception);
+        }
+    }
+
+    @Override
+    public Optional<InboundSecureMessage> findByIdForUpdate(Connection connection, long id) {
+        String sql = """
+            SELECT *
+            FROM inbound_secure_messages
+            WHERE id = ?
+            FOR UPDATE
+            """;
+
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, id);
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (!resultSet.next()) {
+                    return Optional.empty();
+                }
+
+                return Optional.of(mapInboundSecureMessage(resultSet));
+            }
+        } catch (SQLException exception) {
+            throw new RuntimeException("Could not find inbound secure message by id", exception);
+        }
+    }
+
+    @Override
+    public void markProcessed(Connection connection, long id) {
+        String sql = """
+            UPDATE inbound_secure_messages
+            SET status = 'PROCESSED',
+                processed_at = CURRENT_TIMESTAMP,
+                failure_reason = NULL
+            WHERE id = ?
+            """;
+
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, id);
+            statement.executeUpdate();
+        } catch (SQLException exception) {
+            throw new RuntimeException("Could not mark inbound secure message as PROCESSED", exception);
+        }
+    }
+
+    @Override
+    public void markFailed(Connection connection, long id, String failureReason) {
+        String sql = """
+            UPDATE inbound_secure_messages
+            SET status = 'FAILED',
+                failure_reason = ?
+            WHERE id = ?
+              AND status <> 'PROCESSED'
+            """;
+
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, failureReason);
+            statement.setLong(2, id);
+            statement.executeUpdate();
+        } catch (SQLException exception) {
+            throw new RuntimeException("Could not mark inbound secure message as FAILED", exception);
         }
     }
 
