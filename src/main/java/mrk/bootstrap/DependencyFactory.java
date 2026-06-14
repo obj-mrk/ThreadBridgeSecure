@@ -9,6 +9,7 @@ import mrk.application.usecase.*;
 import mrk.config.AppConfig;
 import mrk.http.HttpServerFactory;
 import mrk.http.handler.*;
+import mrk.infrastructure.cache.ReaderWriterSecureInboxCache;
 import mrk.infrastructure.crypto.JcaHybridEncryptionService;
 import mrk.infrastructure.crypto.JcaKeyManagementService;
 import mrk.infrastructure.crypto.RsaPemKeyParser;
@@ -62,6 +63,8 @@ public class DependencyFactory {
 
         KeyFingerprintCalculator keyFingerprintCalculator = new KeyFingerprintCalculator();
 
+        SecureInboxCache secureInboxCache = new ReaderWriterSecureInboxCache();
+
         RegisterUserUseCase registerUserUseCase = new RegisterUserUseCase(
                 transactionManager,
                 userRepository
@@ -98,7 +101,8 @@ public class DependencyFactory {
 
         GetSecureInboxUseCase getSecureInboxUseCase = new GetSecureInboxUseCase(
                 transactionManager,
-                secureMessageRepository
+                secureMessageRepository,
+                secureInboxCache
         );
 
         DecryptSecureMessageUseCase decryptSecureMessageUseCase = new DecryptSecureMessageUseCase(
@@ -144,6 +148,7 @@ public class DependencyFactory {
 
         EventListener secureMessageEncryptedListener = new SecureMessageEncryptedListener(
                 notificationRepository,
+                secureInboxCache,
                 jsonUtils
         );
 

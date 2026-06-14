@@ -1,6 +1,7 @@
 package mrk.infrastructure.event.listener;
 
 import mrk.application.port.NotificationRepository;
+import mrk.application.port.SecureInboxCache;
 import mrk.domain.model.Notification;
 import mrk.domain.model.OutboxEvent;
 import mrk.infrastructure.event.EventListener;
@@ -10,14 +11,18 @@ import mrk.utils.JsonUtils;
 import java.sql.Connection;
 
 public class SecureMessageEncryptedListener implements EventListener {
+
     private final NotificationRepository notificationRepository;
+    private final SecureInboxCache secureInboxCache;
     private final JsonUtils jsonUtils;
 
     public SecureMessageEncryptedListener(
             NotificationRepository notificationRepository,
+            SecureInboxCache secureInboxCache,
             JsonUtils jsonUtils
     ) {
         this.notificationRepository = notificationRepository;
+        this.secureInboxCache = secureInboxCache;
         this.jsonUtils = jsonUtils;
     }
 
@@ -38,9 +43,8 @@ public class SecureMessageEncryptedListener implements EventListener {
                 payload.getSecureMessageId()
         );
 
-        // Listener должен быть идемпотентным.
-        // Если outbox событие будет доставлено повторно после сбоя,
-        // UNIQUE(secure_message_id, type) не даст создать дубль notification.
         notificationRepository.saveIfAbsent(connection, notification);
+
+        secureInboxCache.evict(payload.getRecipientId());
     }
 }
