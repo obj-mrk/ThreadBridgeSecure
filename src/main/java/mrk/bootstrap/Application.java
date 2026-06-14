@@ -2,10 +2,7 @@ package mrk.bootstrap;
 
 import com.sun.net.httpserver.HttpServer;
 import mrk.infrastructure.jdbc.DatabaseHealthChecker;
-import mrk.infrastructure.worker.CryptoWorkerPool;
-import mrk.infrastructure.worker.InboundSecureMessagePoller;
-import mrk.infrastructure.worker.OutboxEventPoller;
-import mrk.infrastructure.worker.OutboxEventWorkerPool;
+import mrk.infrastructure.worker.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,6 +15,7 @@ public class Application {
     private final CryptoWorkerPool cryptoWorkerPool;
     private final OutboxEventPoller outboxEventPoller;
     private final OutboxEventWorkerPool outboxEventWorkerPool;
+    private final CleanupExpiredMessagesWorker cleanupExpiredMessagesWorker;
 
     public Application(
             HttpServer server,
@@ -25,7 +23,7 @@ public class Application {
             InboundSecureMessagePoller inboundSecureMessagePoller,
             CryptoWorkerPool cryptoWorkerPool,
             OutboxEventPoller outboxEventPoller,
-            OutboxEventWorkerPool outboxEventWorkerPool
+            OutboxEventWorkerPool outboxEventWorkerPool, CleanupExpiredMessagesWorker cleanupExpiredMessagesWorker
     ) {
         this.server = server;
         this.databaseHealthChecker = databaseHealthChecker;
@@ -33,6 +31,7 @@ public class Application {
         this.cryptoWorkerPool = cryptoWorkerPool;
         this.outboxEventPoller = outboxEventPoller;
         this.outboxEventWorkerPool = outboxEventWorkerPool;
+        this.cleanupExpiredMessagesWorker = cleanupExpiredMessagesWorker;
     }
 
     public void start() {
@@ -48,6 +47,9 @@ public class Application {
         outboxEventPoller.start();
         log.info("Outbox event poller started");
 
+        cleanupExpiredMessagesWorker.start();
+        log.info("Expired messages cleanup worker started");
+
         server.start();
         log.info("HTTP server started");
     }
@@ -56,6 +58,7 @@ public class Application {
         server.stop(1);
         inboundSecureMessagePoller.close();
         outboxEventPoller.close();
+        cleanupExpiredMessagesWorker.close();
         cryptoWorkerPool.close();
         outboxEventWorkerPool.close();
     }

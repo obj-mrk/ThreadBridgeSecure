@@ -25,6 +25,9 @@ public class AppConfig {
     private final int outboxPollBatchSize = 10;
     private final int outboxPollDelayMillis = 1_000;
 
+    private final int expiredCleanupBatchSize = 50;
+    private final long expiredCleanupDelayMillis = 10_000;
+
 
     public String getApplicationName() {
         return applicationName;
@@ -92,5 +95,13 @@ public class AppConfig {
 
     public int getOutboxPollDelayMillis() {
         return outboxPollDelayMillis;
+    }
+
+    public int getExpiredCleanupBatchSize() {
+        return expiredCleanupBatchSize;
+    }
+
+    public long getExpiredCleanupDelayMillis() {
+        return expiredCleanupDelayMillis;
     }
 }

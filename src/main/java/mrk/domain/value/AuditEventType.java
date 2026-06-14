@@ -1,0 +1,11 @@
+package mrk.domain.value;
+
+public enum AuditEventType {
+    INBOUND_ACCEPTED,
+    MESSAGE_ENCRYPTED,
+    MESSAGE_READ,
+    MESSAGE_DESTROYED,
+    MESSAGE_EXPIRED,
+    DECRYPT_DENIED,
+    MESSAGE_PROCESSING_FAILED
+}

@@ -4,20 +4,10 @@ import mrk.application.command.ProcessSecureMessageCommand;
 import mrk.application.crypto.EncryptedPayload;
 import mrk.application.exception.NotFoundException;
 import mrk.application.exception.ValidationException;
-import mrk.application.port.HybridEncryptionService;
-import mrk.application.port.InboundSecureMessageRepository;
-import mrk.application.port.KeyManagementService;
-import mrk.application.port.OutboxEventRepository;
-import mrk.application.port.SecureMessageRepository;
-import mrk.application.port.TransactionManager;
-import mrk.application.port.UserKeyRepository;
-import mrk.application.port.UserRepository;
+import mrk.application.port.*;
 import mrk.application.result.ProcessSecureMessageResult;
-import mrk.domain.model.InboundSecureMessage;
-import mrk.domain.model.OutboxEvent;
-import mrk.domain.model.SecureMessage;
-import mrk.domain.model.User;
-import mrk.domain.model.UserKey;
+import mrk.domain.model.*;
+import mrk.domain.value.AuditEventType;
 import mrk.domain.value.InboundMessageStatus;
 
 import java.security.PublicKey;
@@ -32,6 +22,7 @@ public class ProcessSecureMessageUseCase {
     private final UserKeyRepository userKeyRepository;
     private final KeyManagementService keyManagementService;
     private final HybridEncryptionService hybridEncryptionService;
+    private final AuditEventRepository auditEventRepository;
 
     public ProcessSecureMessageUseCase(
             TransactionManager transactionManager,
@@ -41,7 +32,7 @@ public class ProcessSecureMessageUseCase {
             UserRepository userRepository,
             UserKeyRepository userKeyRepository,
             KeyManagementService keyManagementService,
-            HybridEncryptionService hybridEncryptionService
+            HybridEncryptionService hybridEncryptionService, AuditEventRepository auditEventRepository
     ) {
         this.transactionManager = transactionManager;
         this.inboundRepository = inboundRepository;
@@ -51,6 +42,7 @@ public class ProcessSecureMessageUseCase {
         this.userKeyRepository = userKeyRepository;
         this.keyManagementService = keyManagementService;
         this.hybridEncryptionService = hybridEncryptionService;
+        this.auditEventRepository = auditEventRepository;
     }
 
     public ProcessSecureMessageResult process(ProcessSecureMessageCommand command) {
@@ -105,6 +97,17 @@ public class ProcessSecureMessageUseCase {
                 );
 
                 long secureMessageId = secureMessageRepository.save(connection, secureMessage);
+
+                auditEventRepository.save(
+                        connection,
+                        AuditEvent.of(
+                                inbound.getSenderId(),
+                                AuditEventType.MESSAGE_ENCRYPTED,
+                                "SecureMessage",
+                                secureMessageId,
+                                "Recipient=" + inbound.getRecipientId()
+                        )
+                );
 
                 outboxEventRepository.save(
                         connection,

@@ -2,6 +2,9 @@ package mrk.bootstrap;
 
 import com.sun.net.httpserver.HttpServer;
 import mrk.application.port.*;
+import mrk.application.service.DecryptPermissionPolicy;
+import mrk.application.service.SecureMessageAuditFactory;
+import mrk.application.service.SecureMessageOutboxFactory;
 import mrk.application.usecase.*;
 import mrk.config.AppConfig;
 import mrk.http.HttpServerFactory;
@@ -13,10 +16,7 @@ import mrk.infrastructure.event.EventDispatcher;
 import mrk.infrastructure.event.EventListener;
 import mrk.infrastructure.event.listener.SecureMessageEncryptedListener;
 import mrk.infrastructure.jdbc.*;
-import mrk.infrastructure.worker.CryptoWorkerPool;
-import mrk.infrastructure.worker.InboundSecureMessagePoller;
-import mrk.infrastructure.worker.OutboxEventPoller;
-import mrk.infrastructure.worker.OutboxEventWorkerPool;
+import mrk.infrastructure.worker.*;
 import mrk.utils.JsonUtils;
 import mrk.utils.KeyFingerprintCalculator;
 
@@ -48,11 +48,17 @@ public class DependencyFactory {
 
         NotificationRepository notificationRepository = new JdbcNotificationRepository();
 
+        AuditEventRepository auditEventRepository = new JdbcAuditEventRepository();
+
         KeyManagementService keyManagementService = new JcaKeyManagementService(
                 new RsaPemKeyParser()
         );
 
         HybridEncryptionService hybridEncryptionService = new JcaHybridEncryptionService();
+
+        DecryptPermissionPolicy decryptPermissionPolicy = new DecryptPermissionPolicy();
+        SecureMessageAuditFactory secureMessageAuditFactory = new SecureMessageAuditFactory();
+        SecureMessageOutboxFactory secureMessageOutboxFactory = new SecureMessageOutboxFactory();
 
         KeyFingerprintCalculator keyFingerprintCalculator = new KeyFingerprintCalculator();
 
@@ -72,6 +78,7 @@ public class DependencyFactory {
                 transactionManager,
                 userRepository,
                 inboundSecureMessageRepository,
+                auditEventRepository,
                 appConfig.getMaxSecureMessageLength(),
                 appConfig.getMinMessageTtlSeconds(),
                 appConfig.getMaxMessageTtlSeconds()
@@ -85,7 +92,8 @@ public class DependencyFactory {
                 userRepository,
                 userKeyRepository,
                 keyManagementService,
-                hybridEncryptionService
+                hybridEncryptionService,
+                auditEventRepository
         );
 
         GetSecureInboxUseCase getSecureInboxUseCase = new GetSecureInboxUseCase(
@@ -98,7 +106,27 @@ public class DependencyFactory {
                 secureMessageRepository,
                 userKeyRepository,
                 keyManagementService,
-                hybridEncryptionService
+                hybridEncryptionService,
+                auditEventRepository,
+                outboxEventRepository,
+                decryptPermissionPolicy,
+                secureMessageAuditFactory,
+                secureMessageOutboxFactory
+        );
+
+        ExpireSecureMessagesUseCase expireSecureMessagesUseCase = new ExpireSecureMessagesUseCase(
+                transactionManager,
+                secureMessageRepository,
+                auditEventRepository,
+                outboxEventRepository,
+                secureMessageAuditFactory,
+                secureMessageOutboxFactory
+        );
+
+        CleanupExpiredMessagesWorker cleanupExpiredMessagesWorker = new CleanupExpiredMessagesWorker(
+                expireSecureMessagesUseCase,
+                appConfig.getExpiredCleanupBatchSize(),
+                appConfig.getExpiredCleanupDelayMillis()
         );
 
         CryptoWorkerPool cryptoWorkerPool = new CryptoWorkerPool(
@@ -179,7 +207,8 @@ public class DependencyFactory {
                 inboundSecureMessagePoller,
                 cryptoWorkerPool,
                 outboxEventPoller,
-                outboxEventWorkerPool
+                outboxEventWorkerPool,
+                cleanupExpiredMessagesWorker
         );
     }
 }

@@ -3,12 +3,15 @@ package mrk.application.usecase;
 import mrk.application.command.AcceptSecureMessageCommand;
 import mrk.application.exception.NotFoundException;
 import mrk.application.exception.ValidationException;
+import mrk.application.port.AuditEventRepository;
 import mrk.application.port.InboundSecureMessageRepository;
 import mrk.application.port.TransactionManager;
 import mrk.application.port.UserRepository;
 import mrk.application.result.AcceptSecureMessageResult;
+import mrk.domain.model.AuditEvent;
 import mrk.domain.model.InboundSecureMessage;
 import mrk.domain.model.User;
+import mrk.domain.value.AuditEventType;
 import mrk.domain.value.InboundMessageStatus;
 import mrk.domain.value.UserStatus;
 
@@ -16,6 +19,7 @@ public class AcceptSecureMessageUseCase {
     private final TransactionManager transactionManager;
     private final UserRepository userRepository;
     private final InboundSecureMessageRepository inboundSecureMessageRepository;
+    private final AuditEventRepository auditEventRepository;
     private final int maxMessageLength;
     private final int minTtlSeconds;
     private final int maxTtlSeconds;
@@ -23,7 +27,7 @@ public class AcceptSecureMessageUseCase {
     public AcceptSecureMessageUseCase(
             TransactionManager transactionManager,
             UserRepository userRepository,
-            InboundSecureMessageRepository inboundSecureMessageRepository,
+            InboundSecureMessageRepository inboundSecureMessageRepository, AuditEventRepository auditEventRepository,
             int maxMessageLength,
             int minTtlSeconds,
             int maxTtlSeconds
@@ -31,6 +35,7 @@ public class AcceptSecureMessageUseCase {
         this.transactionManager = transactionManager;
         this.userRepository = userRepository;
         this.inboundSecureMessageRepository = inboundSecureMessageRepository;
+        this.auditEventRepository = auditEventRepository;
         this.maxMessageLength = maxMessageLength;
         this.minTtlSeconds = minTtlSeconds;
         this.maxTtlSeconds = maxTtlSeconds;
@@ -67,6 +72,17 @@ public class AcceptSecureMessageUseCase {
                         message.setStatus(InboundMessageStatus.RECEIVED);
 
                         long inboundMessageId = inboundSecureMessageRepository.save(connection, message);
+
+                        auditEventRepository.save(
+                                connection,
+                                AuditEvent.of(
+                                        command.getSenderId(),
+                                        AuditEventType.INBOUND_ACCEPTED,
+                                        "InboundSecureMessage",
+                                        inboundMessageId,
+                                        "Recipient=" + command.getRecipientId()
+                                )
+                        );
 
                         return new AcceptSecureMessageResult(
                                 inboundMessageId,

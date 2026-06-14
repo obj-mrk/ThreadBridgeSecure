@@ -4,44 +4,63 @@ import mrk.application.command.DecryptSecureMessageCommand;
 import mrk.application.crypto.EncryptedPayload;
 import mrk.application.exception.NotFoundException;
 import mrk.application.exception.ValidationException;
+import mrk.application.port.AuditEventRepository;
 import mrk.application.port.HybridEncryptionService;
 import mrk.application.port.KeyManagementService;
+import mrk.application.port.OutboxEventRepository;
 import mrk.application.port.SecureMessageRepository;
 import mrk.application.port.TransactionManager;
 import mrk.application.port.UserKeyRepository;
 import mrk.application.result.DecryptedMessageResult;
+import mrk.application.service.DecryptPermissionPolicy;
+import mrk.application.service.SecureMessageAuditFactory;
+import mrk.application.service.SecureMessageOutboxFactory;
 import mrk.domain.model.SecureMessage;
 import mrk.domain.model.UserKey;
-import mrk.domain.value.SecureMessageStatus;
 
 import java.security.PrivateKey;
+import java.sql.Connection;
 import java.time.LocalDateTime;
 
 public class DecryptSecureMessageUseCase {
+
     private final TransactionManager transactionManager;
     private final SecureMessageRepository secureMessageRepository;
     private final UserKeyRepository userKeyRepository;
     private final KeyManagementService keyManagementService;
     private final HybridEncryptionService hybridEncryptionService;
+    private final AuditEventRepository auditEventRepository;
+    private final OutboxEventRepository outboxEventRepository;
+    private final DecryptPermissionPolicy decryptPermissionPolicy;
+    private final SecureMessageAuditFactory auditFactory;
+    private final SecureMessageOutboxFactory outboxFactory;
 
     public DecryptSecureMessageUseCase(
             TransactionManager transactionManager,
             SecureMessageRepository secureMessageRepository,
             UserKeyRepository userKeyRepository,
             KeyManagementService keyManagementService,
-            HybridEncryptionService hybridEncryptionService
+            HybridEncryptionService hybridEncryptionService,
+            AuditEventRepository auditEventRepository,
+            OutboxEventRepository outboxEventRepository,
+            DecryptPermissionPolicy decryptPermissionPolicy,
+            SecureMessageAuditFactory auditFactory,
+            SecureMessageOutboxFactory outboxFactory
     ) {
         this.transactionManager = transactionManager;
         this.secureMessageRepository = secureMessageRepository;
         this.userKeyRepository = userKeyRepository;
         this.keyManagementService = keyManagementService;
         this.hybridEncryptionService = hybridEncryptionService;
+        this.auditEventRepository = auditEventRepository;
+        this.outboxEventRepository = outboxEventRepository;
+        this.decryptPermissionPolicy = decryptPermissionPolicy;
+        this.auditFactory = auditFactory;
+        this.outboxFactory = outboxFactory;
     }
 
     public DecryptedMessageResult decrypt(DecryptSecureMessageCommand command) {
-        if (command == null) {
-            throw new ValidationException("Command must not be null");
-        }
+        validateCommand(command);
 
         return transactionManager.execute(connection -> {
             SecureMessage message = secureMessageRepository
@@ -50,66 +69,106 @@ public class DecryptSecureMessageUseCase {
                             command.getMessageId(),
                             command.getRecipientId()
                     )
-                    .orElseThrow(() -> new NotFoundException("Secure message not found"));
+                    .orElseThrow(() -> {
+                        auditDecryptDenied(
+                                connection,
+                                command.getRecipientId(),
+                                command.getMessageId(),
+                                "Secure message not found or access denied"
+                        );
+                        return new NotFoundException("Secure message not found");
+                    });
 
-            validateReadable(message);
+            try {
+                decryptPermissionPolicy.checkCanDecrypt(message, LocalDateTime.now());
+            } catch (ValidationException exception) {
+                auditDecryptDenied(
+                        connection,
+                        command.getRecipientId(),
+                        message.getId(),
+                        exception.getMessage()
+                );
+                throw exception;
+            }
 
             UserKey recipientKey = userKeyRepository
                     .findActiveByUserId(connection, command.getRecipientId())
-                    .orElseThrow(() -> new NotFoundException("Recipient active key not found"));
-
-            if (recipientKey.getEncryptedPrivateKeyPem() == null
-                    || recipientKey.getEncryptedPrivateKeyPem().isBlank()) {
-                throw new ValidationException("Recipient private key is not available");
-            }
+                    .orElseThrow(() -> {
+                        auditDecryptDenied(
+                                connection,
+                                command.getRecipientId(),
+                                message.getId(),
+                                "Recipient active key not found"
+                        );
+                        return new ValidationException("Recipient active key not found");
+                    });
 
             PrivateKey privateKey = keyManagementService.parsePrivateKey(
                     recipientKey.getEncryptedPrivateKeyPem()
             );
 
-            EncryptedPayload encryptedPayload = new EncryptedPayload(
-                    message.getEncryptedPayload(),
-                    message.getEncryptedContentKey(),
-                    message.getNonce(),
-                    message.getAlgorithm()
+            String plaintext = hybridEncryptionService.decrypt(
+                    toEncryptedPayload(message),
+                    privateKey
             );
 
-            String plaintext = hybridEncryptionService.decrypt(encryptedPayload, privateKey);
-
-            boolean destroyedAfterRead = message.isOneTime();
-
-            if (destroyedAfterRead) {
+            if (message.isOneTime()) {
                 secureMessageRepository.markDestroyed(connection, message.getId());
             } else {
                 secureMessageRepository.markRead(connection, message.getId());
             }
 
+            auditEventRepository.save(
+                    connection,
+                    auditFactory.messageRead(command.getRecipientId(), message)
+            );
+
+            outboxEventRepository.save(
+                    connection,
+                    outboxFactory.messageRead(message)
+            );
+
             return new DecryptedMessageResult(
                     message.getId(),
                     message.getSenderId(),
                     plaintext,
-                    destroyedAfterRead
+                    message.isOneTime()
             );
         });
     }
 
-    private void validateReadable(SecureMessage message) {
-        LocalDateTime now = LocalDateTime.now();
-
-        if (message.getStatus() == SecureMessageStatus.DESTROYED) {
-            throw new ValidationException("Message has already been destroyed");
+    private void validateCommand(DecryptSecureMessageCommand command) {
+        if (command == null) {
+            throw new ValidationException("Command must not be null");
         }
 
-        if (message.getStatus() == SecureMessageStatus.EXPIRED) {
-            throw new ValidationException("Message has expired");
+        if (command.getMessageId() <= 0) {
+            throw new ValidationException("Message id must be positive");
         }
 
-        if (message.isExpired(now)) {
-            throw new ValidationException("Message has expired");
+        if (command.getRecipientId() <= 0) {
+            throw new ValidationException("Recipient id must be positive");
         }
+    }
 
-        if (!message.isReadable()) {
-            throw new ValidationException("Message is not readable in status " + message.getStatus());
-        }
+    private EncryptedPayload toEncryptedPayload(SecureMessage message) {
+        return new EncryptedPayload(
+                message.getEncryptedPayload(),
+                message.getEncryptedContentKey(),
+                message.getNonce(),
+                message.getAlgorithm()
+        );
+    }
+
+    private void auditDecryptDenied(
+            Connection connection,
+            long actorUserId,
+            long messageId,
+            String reason
+    ) {
+        auditEventRepository.save(
+                connection,
+                auditFactory.decryptDenied(actorUserId, messageId, reason)
+        );
     }
 }

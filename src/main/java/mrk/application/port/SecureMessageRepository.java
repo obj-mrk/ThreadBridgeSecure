@@ -20,7 +20,11 @@ public interface SecureMessageRepository {
             long recipientId
     );
 
+    int markExpiredBatch(Connection connection, int batchSize);
+
     void markRead(Connection connection, long messageId);
 
     void markDestroyed(Connection connection, long messageId);
+
+    void markExpired(Connection connection, long messageId);
 }

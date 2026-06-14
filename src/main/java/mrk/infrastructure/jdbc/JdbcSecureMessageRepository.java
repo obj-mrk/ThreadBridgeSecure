@@ -149,6 +149,42 @@ public class JdbcSecureMessageRepository implements SecureMessageRepository {
     }
 
     @Override
+    public int markExpiredBatch(Connection connection, int batchSize) {
+        String sql = """
+            WITH expired AS (
+                SELECT id
+                FROM secure_messages
+                WHERE expires_at <= CURRENT_TIMESTAMP
+                  AND status NOT IN ('EXPIRED', 'DESTROYED')
+                ORDER BY expires_at
+                FOR UPDATE SKIP LOCKED
+                LIMIT ?
+            )
+            UPDATE secure_messages sm
+            SET status = 'EXPIRED'
+            FROM expired
+            WHERE sm.id = expired.id
+            RETURNING sm.id
+            """;
+
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setInt(1, batchSize);
+
+            int count = 0;
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    count++;
+                }
+            }
+
+            return count;
+        } catch (SQLException exception) {
+            throw new RuntimeException("Could not mark expired secure messages", exception);
+        }
+    }
+
+    @Override
     public void markRead(Connection connection, long messageId) {
         String sql = """
             UPDATE secure_messages
@@ -179,6 +215,23 @@ public class JdbcSecureMessageRepository implements SecureMessageRepository {
             statement.executeUpdate();
         } catch (SQLException exception) {
             throw new RuntimeException("Could not mark secure message as DESTROYED", exception);
+        }
+    }
+
+    @Override
+    public void markExpired(Connection connection, long messageId) {
+        String sql = """
+            UPDATE secure_messages
+            SET status = 'EXPIRED'
+            WHERE id = ?
+              AND status NOT IN ('EXPIRED', 'DESTROYED')
+            """;
+
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, messageId);
+            statement.executeUpdate();
+        } catch (SQLException exception) {
+            throw new RuntimeException("Could not mark secure message as EXPIRED", exception);
         }
     }
 

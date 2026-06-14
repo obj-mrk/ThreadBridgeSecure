@@ -30,6 +30,40 @@ public class OutboxEvent {
         return event;
     }
 
+    public static OutboxEvent secureMessageRead(
+            long secureMessageId,
+            long senderId,
+            long recipientId,
+            boolean destroyedAfterRead
+    ) {
+        OutboxEvent event = new OutboxEvent();
+        event.setEventType("SECURE_MESSAGE_READ");
+        event.setAggregateType("SecureMessage");
+        event.setAggregateId(secureMessageId);
+        event.setPayload("""
+            {"secureMessageId":%d,"senderId":%d,"recipientId":%d,"destroyedAfterRead":%s}
+            """.formatted(
+                secureMessageId,
+                senderId,
+                recipientId,
+                destroyedAfterRead
+        ).trim());
+        event.setStatus(OutboxEventStatus.NEW);
+        return event;
+    }
+
+    public static OutboxEvent secureMessagesExpired(int expiredCount) {
+        OutboxEvent event = new OutboxEvent();
+        event.setEventType("SECURE_MESSAGES_EXPIRED");
+        event.setAggregateType("SecureMessage");
+        event.setAggregateId(0);
+        event.setPayload("""
+            {"expiredCount":%d}
+            """.formatted(expiredCount).trim());
+        event.setStatus(OutboxEventStatus.NEW);
+        return event;
+    }
+
     public Long getId() {
         return id;
     }
