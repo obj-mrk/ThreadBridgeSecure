@@ -25,9 +25,7 @@ public class JdbcUserRepository implements UserRepository {
                     throw new SQLException("Creating user failed, no id returned");
                 }
 
-                long id = resultSet.getLong("id");
-                user.setId(id);
-                return id;
+                return resultSet.getLong("id");
             }
         } catch (SQLException exception) {
             throw new RuntimeException("Could not save user", exception);
@@ -76,17 +74,12 @@ public class JdbcUserRepository implements UserRepository {
         }
     }
 
-    private User mapUser(ResultSet resultSet) throws SQLException {
-        User user = new User();
-        user.setId(resultSet.getLong("id"));
-        user.setUsername(resultSet.getString("username"));
-
-        Timestamp createdAt = resultSet.getTimestamp("created_at");
-        if (createdAt != null) {
-            user.setCreatedAt(createdAt.toLocalDateTime());
-        }
-
-        user.setStatus(UserStatus.valueOf(resultSet.getString("status")));
-        return user;
+    private User mapUser(ResultSet rs) throws SQLException {
+        return User.restore(
+                rs.getLong("id"),
+                rs.getString("username"),
+                rs.getTimestamp("created_at").toLocalDateTime(),
+                UserStatus.valueOf(rs.getString("status"))
+        );
     }
 }

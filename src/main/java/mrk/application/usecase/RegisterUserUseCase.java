@@ -31,10 +31,7 @@ public class RegisterUserUseCase {
                 throw new ConflictException("Username already exists");
             }
 
-            User user = new User();
-            user.setUsername(command.getUsername().trim());
-            user.setStatus(UserStatus.ACTIVE);
-            user.setCreatedAt(LocalDateTime.now());
+            User user = User.register(command.getUsername(), LocalDateTime.now());
 
             long userId = userRepository.save(connection, user);
 
@@ -49,14 +46,6 @@ public class RegisterUserUseCase {
     private void validate(RegisterUserCommand command) {
         if (command == null) {
             throw new ValidationException("Command must not be null");
-        }
-
-        if (command.getUsername() == null || command.getUsername().isBlank()) {
-            throw new ValidationException("Username must not be blank");
-        }
-
-        if (command.getUsername().length() > 100) {
-            throw new ValidationException("Username must not be longer than 100 characters");
         }
     }
 }

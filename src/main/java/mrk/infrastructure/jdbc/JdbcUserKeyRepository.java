@@ -5,6 +5,7 @@ import mrk.domain.model.UserKey;
 import mrk.domain.value.UserKeyStatus;
 
 import java.sql.*;
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 public class JdbcUserKeyRepository implements UserKeyRepository {
@@ -40,9 +41,7 @@ public class JdbcUserKeyRepository implements UserKeyRepository {
                     throw new SQLException("Creating user key failed, no id returned");
                 }
 
-                long id = resultSet.getLong("id");
-                userKey.setId(id);
-                return id;
+                return resultSet.getLong("id");
             }
         } catch (SQLException exception) {
             throw new RuntimeException("Could not save user key", exception);
@@ -122,31 +121,30 @@ public class JdbcUserKeyRepository implements UserKeyRepository {
         }
     }
 
-    private UserKey mapUserKey(ResultSet resultSet) throws SQLException {
-        UserKey userKey = new UserKey();
-        userKey.setId(resultSet.getLong("id"));
-        userKey.setUserId(resultSet.getLong("user_id"));
-        userKey.setPublicKeyPem(resultSet.getString("public_key_pem"));
-        userKey.setEncryptedPrivateKeyPem(resultSet.getString("encrypted_private_key_pem"));
-        userKey.setKeyFingerprint(resultSet.getString("key_fingerprint"));
-        userKey.setAlgorithm(resultSet.getString("algorithm"));
-        userKey.setStatus(UserKeyStatus.valueOf(resultSet.getString("status")));
+    private UserKey mapUserKey(ResultSet rs) throws SQLException {
+        return UserKey.restore(
+                rs.getLong("id"),
+                rs.getLong("user_id"),
+                rs.getString("public_key_pem"),
+                rs.getString("encrypted_private_key_pem"),
+                rs.getString("key_fingerprint"),
+                rs.getString("algorithm"),
+                UserKeyStatus.valueOf(rs.getString("status")),
+                toLocalDateTime(rs.getTimestamp("created_at")),
+                toLocalDateTime(rs.getTimestamp("activated_at")),
+                toNullableLocalDateTime(rs.getTimestamp("revoked_at"))
+        );
+    }
 
-        Timestamp createdAt = resultSet.getTimestamp("created_at");
-        if (createdAt != null) {
-            userKey.setCreatedAt(createdAt.toLocalDateTime());
+    private LocalDateTime toLocalDateTime(Timestamp timestamp) {
+        if (timestamp == null) {
+            throw new IllegalStateException("Required timestamp is null");
         }
 
-        Timestamp activatedAt = resultSet.getTimestamp("activated_at");
-        if (activatedAt != null) {
-            userKey.setActivatedAt(activatedAt.toLocalDateTime());
-        }
+        return timestamp.toLocalDateTime();
+    }
 
-        Timestamp revokedAt = resultSet.getTimestamp("revoked_at");
-        if (revokedAt != null) {
-            userKey.setRevokedAt(revokedAt.toLocalDateTime());
-        }
-
-        return userKey;
+    private LocalDateTime toNullableLocalDateTime(Timestamp timestamp) {
+        return timestamp == null ? null : timestamp.toLocalDateTime();
     }
 }

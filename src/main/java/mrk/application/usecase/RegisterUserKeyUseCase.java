@@ -10,15 +10,11 @@ import mrk.application.port.UserRepository;
 import mrk.application.result.RegisterUserKeyResult;
 import mrk.domain.model.User;
 import mrk.domain.model.UserKey;
-import mrk.domain.value.UserKeyStatus;
-import mrk.domain.value.UserStatus;
 import mrk.utils.KeyFingerprintCalculator;
 
 import java.time.LocalDateTime;
 
 public class RegisterUserKeyUseCase {
-    private static final String SUPPORTED_ALGORITHM = "RSA-OAEP-SHA256";
-
     private final TransactionManager transactionManager;
     private final UserRepository userRepository;
     private final UserKeyRepository userKeyRepository;
@@ -43,10 +39,6 @@ public class RegisterUserKeyUseCase {
             User user = userRepository.findById(connection, command.getUserId())
                     .orElseThrow(() -> new NotFoundException("User not found"));
 
-            if (user.getStatus() != UserStatus.ACTIVE) {
-                throw new ValidationException("User is not active");
-            }
-
             String fingerprint = keyFingerprintCalculator.calculate(command.getPublicKeyPem());
 
             if (userKeyRepository.existsByFingerprint(connection, fingerprint)) {
@@ -55,16 +47,14 @@ public class RegisterUserKeyUseCase {
 
             userKeyRepository.revokeActiveKeysByUserId(connection, command.getUserId());
 
-            UserKey userKey = new UserKey();
-            userKey.setUserId(command.getUserId());
-            userKey.setPublicKeyPem(command.getPublicKeyPem().trim());
-            userKey.setEncryptedPrivateKeyPem(command.getPrivateKeyPem().trim());
-            userKey.setKeyFingerprint(fingerprint);
-            userKey.setAlgorithm(command.getAlgorithm().trim());
-            userKey.setStatus(UserKeyStatus.ACTIVE);
-            userKey.setCreatedAt(LocalDateTime.now());
-            userKey.setActivatedAt(LocalDateTime.now());
-            userKey.setRevokedAt(null);
+            UserKey userKey = UserKey.register(
+                    command.getUserId(),
+                    command.getPublicKeyPem(),
+                    command.getPrivateKeyPem(),
+                    fingerprint,
+                    command.getAlgorithm(),
+                    LocalDateTime.now()
+            );
 
             long keyId = userKeyRepository.save(connection, userKey);
 
@@ -91,24 +81,8 @@ public class RegisterUserKeyUseCase {
             throw new ValidationException("Public key must not be blank");
         }
 
-        if (!command.getPublicKeyPem().contains("BEGIN PUBLIC KEY")) {
-            throw new ValidationException("Public key must be PEM encoded");
-        }
-
-        if (command.getPrivateKeyPem() == null || command.getPrivateKeyPem().isBlank()) {
-            throw new ValidationException("Private key must not be blank");
-        }
-
-        if (!command.getPrivateKeyPem().contains("BEGIN PRIVATE KEY")) {
-            throw new ValidationException("Private key must be PEM encoded");
-        }
-
         if (command.getAlgorithm() == null || command.getAlgorithm().isBlank()) {
             throw new ValidationException("Algorithm must not be blank");
-        }
-
-        if (!SUPPORTED_ALGORITHM.equals(command.getAlgorithm())) {
-            throw new ValidationException("Unsupported key algorithm: " + command.getAlgorithm());
         }
     }
 }
