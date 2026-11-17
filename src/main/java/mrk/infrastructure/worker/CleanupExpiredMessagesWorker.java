@@ -1,5 +1,6 @@
 package mrk.infrastructure.worker;
 
+import mrk.application.result.ExpiredBatchResult;
 import mrk.application.usecase.ExpireSecureMessagesUseCase;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,10 +49,10 @@ public class CleanupExpiredMessagesWorker implements AutoCloseable {
 
     private void cleanupSafely() {
         try {
-            int expiredCount = expireSecureMessagesUseCase.expireBatch(batchSize);
+            ExpiredBatchResult expiredBatch = expireSecureMessagesUseCase.expireBatch(batchSize);
 
-            if (expiredCount > 0) {
-                log.info("Expired {} secure message(s)", expiredCount);
+            if (expiredBatch.expiredCount() > 0) {
+                log.info("Expired {} secure message(s)", expiredBatch.expiredCount());
             }
         } catch (RuntimeException exception) {
             // Один сбой cleanup не должен остановить scheduler.

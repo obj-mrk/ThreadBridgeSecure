@@ -3,6 +3,8 @@ package mrk.domain.model;
 import mrk.domain.value.OutboxEventStatus;
 
 import java.time.LocalDateTime;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public class OutboxEvent {
     private Long id;
@@ -16,17 +18,21 @@ public class OutboxEvent {
     private LocalDateTime processedAt;
     private String failureReason;
 
-    public static OutboxEvent secureMessageEncrypted(long secureMessageId, long recipientId) {
+    public static OutboxEvent secureMessagesExpired(int expiredCount, Set<Long> recipientIds) {
+        String recipientIdsJson = recipientIds.stream()
+                .sorted()
+                .map(String::valueOf)
+                .collect(Collectors.joining(","));
+
         OutboxEvent event = new OutboxEvent();
-        event.setEventType("SECURE_MESSAGE_ENCRYPTED");
+        event.setEventType("SECURE_MESSAGES_EXPIRED");
         event.setAggregateType("SecureMessage");
-        event.setAggregateId(secureMessageId);
-
+        event.setAggregateId(0);
         event.setPayload("""
-                {"secureMessageId":%d,"recipientId":%d}
-                """.formatted(secureMessageId, recipientId).trim());
-
+            {"expiredCount":%d,"recipientIds":[%s]}
+            """.formatted(expiredCount, recipientIdsJson).trim());
         event.setStatus(OutboxEventStatus.NEW);
+
         return event;
     }
 

@@ -16,6 +16,8 @@ import mrk.infrastructure.crypto.RsaPemKeyParser;
 import mrk.infrastructure.event.EventDispatcher;
 import mrk.infrastructure.event.EventListener;
 import mrk.infrastructure.event.listener.SecureMessageEncryptedListener;
+import mrk.infrastructure.event.listener.SecureMessageReadListener;
+import mrk.infrastructure.event.listener.SecureMessagesExpiredListener;
 import mrk.infrastructure.jdbc.*;
 import mrk.infrastructure.worker.*;
 import mrk.utils.JsonUtils;
@@ -32,12 +34,13 @@ public class DependencyFactory {
     }
 
     public Application createApplication() throws IOException {
+        // Config
         ConnectionFactory connectionFactory = new ConnectionFactory(appConfig);
         DatabaseHealthChecker databaseHealthChecker = new DatabaseHealthChecker(connectionFactory);
         JsonUtils jsonUtils = new JsonUtils();
 
+        // JDBC
         TransactionManager transactionManager = new JdbcTransactionManager(connectionFactory);
-
 
         UserRepository userRepository = new JdbcUserRepository();
         UserKeyRepository userKeyRepository = new JdbcUserKeyRepository();
@@ -51,6 +54,7 @@ public class DependencyFactory {
 
         AuditEventRepository auditEventRepository = new JdbcAuditEventRepository();
 
+        // Crypto
         KeyManagementService keyManagementService = new JcaKeyManagementService(
                 new RsaPemKeyParser()
         );
@@ -65,6 +69,7 @@ public class DependencyFactory {
 
         SecureInboxCache secureInboxCache = new ReaderWriterSecureInboxCache();
 
+        // UseCase
         RegisterUserUseCase registerUserUseCase = new RegisterUserUseCase(
                 transactionManager,
                 userRepository
@@ -127,6 +132,7 @@ public class DependencyFactory {
                 secureMessageOutboxFactory
         );
 
+        // Worker
         CleanupExpiredMessagesWorker cleanupExpiredMessagesWorker = new CleanupExpiredMessagesWorker(
                 expireSecureMessagesUseCase,
                 appConfig.getExpiredCleanupBatchSize(),
@@ -146,14 +152,28 @@ public class DependencyFactory {
                 appConfig.getInboundPollDelayMillis()
         );
 
+        // Event
         EventListener secureMessageEncryptedListener = new SecureMessageEncryptedListener(
                 notificationRepository,
                 secureInboxCache,
                 jsonUtils
         );
 
+        EventListener secureMessagesExpiredListener = new SecureMessagesExpiredListener(
+                secureInboxCache,
+                jsonUtils
+        );
+
+        EventListener secureMessageReadListener = new SecureMessageReadListener(
+                notificationRepository,
+                secureInboxCache,
+                jsonUtils
+        );
+
         EventDispatcher eventDispatcher = new EventDispatcher(List.of(
-                secureMessageEncryptedListener
+                secureMessageEncryptedListener,
+                secureMessageReadListener,
+                secureMessagesExpiredListener
         ));
 
         OutboxEventWorkerPool outboxEventWorkerPool = new OutboxEventWorkerPool(
@@ -171,6 +191,7 @@ public class DependencyFactory {
                 appConfig.getOutboxPollDelayMillis()
         );
 
+        // Handler
         HealthHandler healthHandler = new HealthHandler();
         UserHandler userHandler = new UserHandler(
                 jsonUtils,
@@ -194,6 +215,7 @@ public class DependencyFactory {
                 decryptSecureMessageUseCase
         );
 
+        // Http
         HttpServerFactory httpServerFactory = new HttpServerFactory(
                 appConfig,
                 healthHandler,
