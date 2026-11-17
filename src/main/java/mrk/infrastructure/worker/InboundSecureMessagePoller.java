@@ -12,6 +12,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class InboundSecureMessagePoller implements AutoCloseable {
+
     private static final Logger log = LoggerFactory.getLogger(InboundSecureMessagePoller.class);
 
     private final TransactionManager transactionManager;
@@ -20,14 +21,14 @@ public class InboundSecureMessagePoller implements AutoCloseable {
     private final ScheduledExecutorService scheduler;
     private final int batchSize;
     private final long delayMillis;
+    private final int processingTimeoutSeconds;
 
-    public InboundSecureMessagePoller(
-            TransactionManager transactionManager,
-            InboundSecureMessageRepository inboundRepository,
-            CryptoWorkerPool cryptoWorkerPool,
-            int batchSize,
-            long delayMillis
-    ) {
+    public InboundSecureMessagePoller(TransactionManager transactionManager,
+                                      InboundSecureMessageRepository inboundRepository,
+                                      CryptoWorkerPool cryptoWorkerPool,
+                                      int batchSize,
+                                      long delayMillis,
+                                      int processingTimeoutSeconds) {
         if (batchSize <= 0) {
             throw new IllegalArgumentException("Batch size must be positive");
         }
@@ -36,11 +37,17 @@ public class InboundSecureMessagePoller implements AutoCloseable {
             throw new IllegalArgumentException("Delay millis must be positive");
         }
 
+        if (processingTimeoutSeconds <= 0) {
+            throw new IllegalArgumentException("Processing timeout must be positive");
+        }
+
         this.transactionManager = transactionManager;
         this.inboundRepository = inboundRepository;
         this.cryptoWorkerPool = cryptoWorkerPool;
         this.batchSize = batchSize;
         this.delayMillis = delayMillis;
+        this.processingTimeoutSeconds = processingTimeoutSeconds;
+
         this.scheduler = Executors.newSingleThreadScheduledExecutor(
                 new NamedThreadFactory("inbound-poller")
         );
@@ -59,15 +66,18 @@ public class InboundSecureMessagePoller implements AutoCloseable {
         try {
             poll();
         } catch (RuntimeException exception) {
-            // Нельзя позволить одному сбою БД убить ScheduledExecutor.
-            // Следующий polling cycle должен продолжить работу.
+            // Один сбой не должен останавливать следующие polling cycle.
             log.warn("Inbound polling failed: {}", exception.getMessage());
         }
     }
 
     private void poll() {
         List<InboundSecureMessage> claimedMessages = transactionManager.execute(connection ->
-                inboundRepository.claimReceivedBatch(connection, batchSize)
+                inboundRepository.claimProcessableBatch(
+                        connection,
+                        batchSize,
+                        processingTimeoutSeconds
+                )
         );
 
         for (InboundSecureMessage message : claimedMessages) {

@@ -1,7 +1,8 @@
 package mrk.config;
 
 public class AppConfig {
-
+    // добавить комментарии
+    // почистить код, убрать секретные данные
     private final int serverPort = 8080;
     private final int backlog = 100;
     private final String serverHost = "localhost";
@@ -18,8 +19,11 @@ public class AppConfig {
     private final int maxMessageTtlSeconds = 86_400;
 
     private final int cryptoWorkerThreads = 4;
+    private final int cryptoQueueCapacity = 8;
+
     private final int inboundPollBatchSize = 10;
     private final long inboundPollDelayMillis = 1_000;
+    private final int inboundProcessingTimeoutSeconds = 30;
 
     private final int outboxWorkerThreads = 2;
     private final int outboxPollBatchSize = 10;
@@ -27,7 +31,6 @@ public class AppConfig {
 
     private final int expiredCleanupBatchSize = 50;
     private final long expiredCleanupDelayMillis = 10_000;
-
 
     public String getApplicationName() {
         return applicationName;
@@ -104,4 +107,8 @@ public class AppConfig {
     public long getExpiredCleanupDelayMillis() {
         return expiredCleanupDelayMillis;
     }
+
+    public int getCryptoQueueCapacity() {return cryptoQueueCapacity;}
+
+    public int getInboundProcessingTimeoutSeconds() {return inboundProcessingTimeoutSeconds;}
 }

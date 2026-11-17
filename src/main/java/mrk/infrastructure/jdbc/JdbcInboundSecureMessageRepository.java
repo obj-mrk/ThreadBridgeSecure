@@ -101,12 +101,20 @@ public class JdbcInboundSecureMessageRepository implements InboundSecureMessageR
             throw new RuntimeException("Could not check inbound secure message existence", exception);
         }
     }
+
     @Override
-    public List<InboundSecureMessage> claimReceivedBatch(Connection connection, int batchSize) {
+    public List<InboundSecureMessage> claimProcessableBatch(Connection connection, int batchSize, int processingTimeoutSeconds) {
         String selectSql = """
             SELECT *
             FROM inbound_secure_messages
             WHERE status = 'RECEIVED'
+               OR (
+                    status = 'PROCESSING'
+                    AND (
+                        processing_started_at IS NULL
+                        OR processing_started_at < CURRENT_TIMESTAMP - (? * INTERVAL '1 second')
+                    )
+               )
             ORDER BY received_at
             FOR UPDATE SKIP LOCKED
             LIMIT ?
@@ -124,7 +132,8 @@ public class JdbcInboundSecureMessageRepository implements InboundSecureMessageR
             List<InboundSecureMessage> messages = new ArrayList<>();
 
             try (PreparedStatement selectStatement = connection.prepareStatement(selectSql)) {
-                selectStatement.setInt(1, batchSize);
+                selectStatement.setInt(1, processingTimeoutSeconds);
+                selectStatement.setInt(2, batchSize);
 
                 try (ResultSet resultSet = selectStatement.executeQuery()) {
                     while (resultSet.next()) {
@@ -133,8 +142,6 @@ public class JdbcInboundSecureMessageRepository implements InboundSecureMessageR
                 }
             }
 
-            // Claiming делаем в той же короткой транзакции, что и SELECT FOR UPDATE.
-            // После commit другие poller-ы уже не увидят эти строки как RECEIVED.
             try (PreparedStatement updateStatement = connection.prepareStatement(updateSql)) {
                 for (InboundSecureMessage message : messages) {
                     updateStatement.setLong(1, message.getId());

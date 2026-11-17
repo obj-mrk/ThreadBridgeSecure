@@ -7,13 +7,14 @@ import java.util.List;
 import java.util.Optional;
 
 public interface InboundSecureMessageRepository {
+
     long save(Connection connection, InboundSecureMessage message);
 
     Optional<InboundSecureMessage> findByRequestId(Connection connection, String requestId);
 
     boolean existsByRequestId(Connection connection, String requestId);
 
-    List<InboundSecureMessage> claimReceivedBatch(Connection connection, int batchSize);
+    List<InboundSecureMessage> claimProcessableBatch(Connection connection, int batchSize, int processingTimeoutSeconds);
 
     Optional<InboundSecureMessage> findByIdForUpdate(Connection connection, long id);
 

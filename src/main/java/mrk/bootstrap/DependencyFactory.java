@@ -141,6 +141,7 @@ public class DependencyFactory {
 
         CryptoWorkerPool cryptoWorkerPool = new CryptoWorkerPool(
                 appConfig.getCryptoWorkerThreads(),
+                appConfig.getCryptoQueueCapacity(),
                 processSecureMessageUseCase
         );
 
@@ -149,7 +150,8 @@ public class DependencyFactory {
                 inboundSecureMessageRepository,
                 cryptoWorkerPool,
                 appConfig.getInboundPollBatchSize(),
-                appConfig.getInboundPollDelayMillis()
+                appConfig.getInboundPollDelayMillis(),
+                appConfig.getInboundProcessingTimeoutSeconds()
         );
 
         // Event
