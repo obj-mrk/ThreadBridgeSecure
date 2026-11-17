@@ -22,7 +22,7 @@ CREATE TABLE inbound_secure_messages (
                              request_id VARCHAR(150) NOT NULL UNIQUE,
                              sender_id BIGINT NOT NULL REFERENCES users(id),
                              recipient_id BIGINT NOT NULL REFERENCES users(id),
-                             plaintext_payload TEXT NOT NULL,
+                             plaintext_payload TEXT NULL,
                              ttl_seconds INTEGER NOT NULL,
                              one_time BOOLEAN NOT NULL,
                              status VARCHAR(30) NOT NULL,

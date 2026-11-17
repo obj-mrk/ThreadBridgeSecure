@@ -1,14 +1,13 @@
 package mrk.infrastructure.jdbc;
 
 import mrk.application.port.SecureMessageRepository;
+import mrk.application.result.ExpiredBatchResult;
 import mrk.application.result.SecureInboxItem;
 import mrk.domain.model.SecureMessage;
 import mrk.domain.value.SecureMessageStatus;
 
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 public class JdbcSecureMessageRepository implements SecureMessageRepository {
 
@@ -60,21 +59,28 @@ public class JdbcSecureMessageRepository implements SecureMessageRepository {
     }
 
     @Override
-    public boolean existsByInboundMessageId(Connection connection, long inboundMessageId) {
+    public Optional<Long> findIdByInboundMessageId(Connection connection, long inboundMessageId) {
         String sql = """
-                SELECT 1
-                FROM secure_messages
-                WHERE inbound_message_id = ?
-                """;
+            SELECT id
+            FROM secure_messages
+            WHERE inbound_message_id = ?
+            """;
 
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setLong(1, inboundMessageId);
 
             try (ResultSet resultSet = statement.executeQuery()) {
-                return resultSet.next();
+                if (!resultSet.next()) {
+                    return Optional.empty();
+                }
+
+                return Optional.of(resultSet.getLong("id"));
             }
         } catch (SQLException exception) {
-            throw new RuntimeException("Could not check secure message existence", exception);
+            throw new RuntimeException(
+                    "Could not find secure message by inbound message id",
+                    exception
+            );
         }
     }
 
@@ -119,11 +125,7 @@ public class JdbcSecureMessageRepository implements SecureMessageRepository {
     }
 
     @Override
-    public Optional<SecureMessage> findByIdForRecipientForUpdate(
-            Connection connection,
-            long messageId,
-            long recipientId
-    ) {
+    public Optional<SecureMessage> findByIdForRecipientForUpdate(Connection connection, long messageId, long recipientId) {
         String sql = """
             SELECT *
             FROM secure_messages
@@ -149,7 +151,7 @@ public class JdbcSecureMessageRepository implements SecureMessageRepository {
     }
 
     @Override
-    public int markExpiredBatch(Connection connection, int batchSize) {
+    public ExpiredBatchResult markExpiredBatch(Connection connection, int batchSize) {
         String sql = """
             WITH expired AS (
                 SELECT id
@@ -164,21 +166,24 @@ public class JdbcSecureMessageRepository implements SecureMessageRepository {
             SET status = 'EXPIRED'
             FROM expired
             WHERE sm.id = expired.id
-            RETURNING sm.id
+            RETURNING sm.id,
+                      sm.recipient_id
             """;
 
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setInt(1, batchSize);
 
             int count = 0;
+            Set<Long> recipientIds = new HashSet<>();
 
             try (ResultSet resultSet = statement.executeQuery()) {
                 while (resultSet.next()) {
                     count++;
+                    recipientIds.add(resultSet.getLong("recipient_id"));
                 }
             }
 
-            return count;
+            return new ExpiredBatchResult(count, recipientIds);
         } catch (SQLException exception) {
             throw new RuntimeException("Could not mark expired secure messages", exception);
         }

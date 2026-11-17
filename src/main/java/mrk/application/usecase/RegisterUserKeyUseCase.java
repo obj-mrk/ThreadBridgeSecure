@@ -8,13 +8,13 @@ import mrk.application.port.TransactionManager;
 import mrk.application.port.UserKeyRepository;
 import mrk.application.port.UserRepository;
 import mrk.application.result.RegisterUserKeyResult;
-import mrk.domain.model.User;
 import mrk.domain.model.UserKey;
 import mrk.utils.KeyFingerprintCalculator;
 
 import java.time.LocalDateTime;
 
 public class RegisterUserKeyUseCase {
+
     private final TransactionManager transactionManager;
     private final UserRepository userRepository;
     private final UserKeyRepository userKeyRepository;
@@ -35,17 +35,28 @@ public class RegisterUserKeyUseCase {
     public RegisterUserKeyResult register(RegisterUserKeyCommand command) {
         validate(command);
 
-        return transactionManager.execute(connection -> {
-            User user = userRepository.findById(connection, command.getUserId())
-                    .orElseThrow(() -> new NotFoundException("User not found"));
+        String fingerprint =
+                keyFingerprintCalculator.calculate(command.getPublicKeyPem());
 
-            String fingerprint = keyFingerprintCalculator.calculate(command.getPublicKeyPem());
+        return transactionManager.execute(connection -> {
+
+            // Пользователь является общей точкой синхронизации
+            // для rotation и сохранения зашифрованного сообщения.
+            userRepository.findByIdForUpdate(
+                    connection,
+                    command.getUserId()
+            ).orElseThrow(() -> new NotFoundException("User not found"));
 
             if (userKeyRepository.existsByFingerprint(connection, fingerprint)) {
-                throw new ConflictException("Public key fingerprint already exists");
+                throw new ConflictException(
+                        "Public key fingerprint already exists"
+                );
             }
 
-            userKeyRepository.revokeActiveKeysByUserId(connection, command.getUserId());
+            userKeyRepository.revokeActiveKeysByUserId(
+                    connection,
+                    command.getUserId()
+            );
 
             UserKey userKey = UserKey.register(
                     command.getUserId(),
@@ -56,7 +67,10 @@ public class RegisterUserKeyUseCase {
                     LocalDateTime.now()
             );
 
-            long keyId = userKeyRepository.save(connection, userKey);
+            long keyId = userKeyRepository.save(
+                    connection,
+                    userKey
+            );
 
             return new RegisterUserKeyResult(
                     keyId,
@@ -77,12 +91,18 @@ public class RegisterUserKeyUseCase {
             throw new ValidationException("User id must be positive");
         }
 
-        if (command.getPublicKeyPem() == null || command.getPublicKeyPem().isBlank()) {
-            throw new ValidationException("Public key must not be blank");
+        if (command.getPublicKeyPem() == null
+                || command.getPublicKeyPem().isBlank()) {
+            throw new ValidationException(
+                    "Public key must not be blank"
+            );
         }
 
-        if (command.getAlgorithm() == null || command.getAlgorithm().isBlank()) {
-            throw new ValidationException("Algorithm must not be blank");
+        if (command.getAlgorithm() == null
+                || command.getAlgorithm().isBlank()) {
+            throw new ValidationException(
+                    "Algorithm must not be blank"
+            );
         }
     }
 }

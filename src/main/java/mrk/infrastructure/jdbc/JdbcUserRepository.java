@@ -8,6 +8,7 @@ import java.sql.*;
 import java.util.Optional;
 
 public class JdbcUserRepository implements UserRepository {
+
     @Override
     public long save(Connection connection, User user) {
         String sql = """
@@ -35,24 +36,30 @@ public class JdbcUserRepository implements UserRepository {
     @Override
     public Optional<User> findById(Connection connection, long userId) {
         String sql = """
-                SELECT id, username, created_at, status
+                SELECT id,
+                       username,
+                       created_at,
+                       status
                 FROM users
                 WHERE id = ?
                 """;
 
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setLong(1, userId);
+        return findUser(connection, userId, sql);
+    }
 
-            try (ResultSet resultSet = statement.executeQuery()) {
-                if (!resultSet.next()) {
-                    return Optional.empty();
-                }
+    @Override
+    public Optional<User> findByIdForUpdate(Connection connection, long userId) {
+        String sql = """
+                SELECT id,
+                       username,
+                       created_at,
+                       status
+                FROM users
+                WHERE id = ?
+                FOR UPDATE
+                """;
 
-                return Optional.of(mapUser(resultSet));
-            }
-        } catch (SQLException exception) {
-            throw new RuntimeException("Could not find user by id", exception);
-        }
+        return findUser(connection, userId, sql);
     }
 
     @Override
@@ -74,12 +81,32 @@ public class JdbcUserRepository implements UserRepository {
         }
     }
 
-    private User mapUser(ResultSet rs) throws SQLException {
+    private Optional<User> findUser(
+            Connection connection,
+            long userId,
+            String sql
+    ) {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, userId);
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (!resultSet.next()) {
+                    return Optional.empty();
+                }
+
+                return Optional.of(mapUser(resultSet));
+            }
+        } catch (SQLException exception) {
+            throw new RuntimeException("Could not find user by id", exception);
+        }
+    }
+
+    private User mapUser(ResultSet resultSet) throws SQLException {
         return User.restore(
-                rs.getLong("id"),
-                rs.getString("username"),
-                rs.getTimestamp("created_at").toLocalDateTime(),
-                UserStatus.valueOf(rs.getString("status"))
+                resultSet.getLong("id"),
+                resultSet.getString("username"),
+                resultSet.getTimestamp("created_at").toLocalDateTime(),
+                UserStatus.valueOf(resultSet.getString("status"))
         );
     }
 }

@@ -17,7 +17,7 @@ public interface InboundSecureMessageRepository {
 
     Optional<InboundSecureMessage> findByIdForUpdate(Connection connection, long id);
 
-    void markProcessed(Connection connection, long id);
+    void markProcessedAndClearPlaintext(Connection connection, long id);
 
     void markFailed(Connection connection, long id, String failureReason);
 }

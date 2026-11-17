@@ -11,5 +11,7 @@ public interface UserRepository {
 
     Optional<User> findById(Connection connection, long userId);
 
+    Optional<User> findByIdForUpdate(Connection connection, long userId);
+
     boolean existsByUsername(Connection connection, String username);
 }

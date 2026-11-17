@@ -1,5 +1,6 @@
 package mrk.application.port;
 
+import mrk.application.result.ExpiredBatchResult;
 import mrk.application.result.SecureInboxItem;
 import mrk.domain.model.SecureMessage;
 
@@ -10,17 +11,13 @@ import java.util.Optional;
 public interface SecureMessageRepository {
     long save(Connection connection, SecureMessage message);
 
-    boolean existsByInboundMessageId(Connection connection, long inboundMessageId);
+    Optional<Long> findIdByInboundMessageId(Connection connection, long inboundMessageId);
 
     List<SecureInboxItem> findInboxByRecipientId(Connection connection, long recipientId);
 
-    Optional<SecureMessage> findByIdForRecipientForUpdate(
-            Connection connection,
-            long messageId,
-            long recipientId
-    );
+    Optional<SecureMessage> findByIdForRecipientForUpdate(Connection connection, long messageId, long recipientId);
 
-    int markExpiredBatch(Connection connection, int batchSize);
+    ExpiredBatchResult markExpiredBatch(Connection connection, int batchSize);
 
     void markRead(Connection connection, long messageId);
 

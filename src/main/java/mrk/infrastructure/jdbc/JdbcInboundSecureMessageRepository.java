@@ -178,10 +178,11 @@ public class JdbcInboundSecureMessageRepository implements InboundSecureMessageR
     }
 
     @Override
-    public void markProcessed(Connection connection, long id) {
+    public void markProcessedAndClearPlaintext(Connection connection, long id) {
         String sql = """
             UPDATE inbound_secure_messages
             SET status = 'PROCESSED',
+                plaintext_payload = NULL,
                 processed_at = CURRENT_TIMESTAMP,
                 failure_reason = NULL
             WHERE id = ?
@@ -189,9 +190,17 @@ public class JdbcInboundSecureMessageRepository implements InboundSecureMessageR
 
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setLong(1, id);
-            statement.executeUpdate();
+
+            if (statement.executeUpdate() != 1) {
+                throw new IllegalStateException(
+                        "Inbound secure message could not be marked as PROCESSED"
+                );
+            }
         } catch (SQLException exception) {
-            throw new RuntimeException("Could not mark inbound secure message as PROCESSED", exception);
+            throw new RuntimeException(
+                    "Could not mark inbound secure message as PROCESSED",
+                    exception
+            );
         }
     }
 
