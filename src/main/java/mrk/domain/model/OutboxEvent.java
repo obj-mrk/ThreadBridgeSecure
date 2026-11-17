@@ -18,6 +18,21 @@ public class OutboxEvent {
     private LocalDateTime processedAt;
     private String failureReason;
 
+    public static OutboxEvent secureMessageEncrypted(long secureMessageId, long recipientId) {
+        OutboxEvent event = new OutboxEvent();
+        event.setEventType("SECURE_MESSAGE_ENCRYPTED");
+        event.setAggregateType("SecureMessage");
+        event.setAggregateId(secureMessageId);
+
+        event.setPayload("""
+            {"secureMessageId":%d,"recipientId":%d}
+            """.formatted(secureMessageId, recipientId).trim());
+
+        event.setStatus(OutboxEventStatus.NEW);
+
+        return event;
+    }
+
     public static OutboxEvent secureMessagesExpired(int expiredCount, Set<Long> recipientIds) {
         String recipientIdsJson = recipientIds.stream()
                 .sorted()
