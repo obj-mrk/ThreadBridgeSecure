@@ -2,12 +2,15 @@ services:
   postgres:
     image: postgres:16
     container_name: threadbridge-postgres
+
     environment:
-      POSTGRES_DB: threadbridge
-      POSTGRES_USER: threadbridge_user
-      POSTGRES_PASSWORD: threadbridge_password
+      POSTGRES_DB: ${THREADBRIDGE_DB_NAME:-threadbridge}
+      POSTGRES_USER: ${THREADBRIDGE_DB_USER:-threadbridge_user}
+      POSTGRES_PASSWORD: ${THREADBRIDGE_DB_PASSWORD}
+
     ports:
       - "5432:5432"
+
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres/init:/docker-entrypoint-initdb.d
