@@ -54,7 +54,8 @@ public class DependencyFactory {
 
         // Crypto
         KeyManagementService keyManagementService = new JcaKeyManagementService(
-                new RsaPemKeyParser()
+                new RsaPemKeyParser(),
+                appConfig.getMasterKey()
         );
 
         HybridEncryptionService hybridEncryptionService = new JcaHybridEncryptionService();
@@ -86,7 +87,8 @@ public class DependencyFactory {
                 transactionManager,
                 userRepository,
                 userKeyRepository,
-                keyFingerprintCalculator
+                keyFingerprintCalculator,
+                keyManagementService
         );
 
         AcceptSecureMessageUseCase acceptSecureMessageUseCase = new AcceptSecureMessageUseCase(

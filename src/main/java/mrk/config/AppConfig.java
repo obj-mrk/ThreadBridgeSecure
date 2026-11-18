@@ -45,7 +45,14 @@ public class AppConfig {
 
     private final int expiredCleanupBatchSize = 50;
 
+    private final String masterKey = getConfig(
+            "THREADBRIDGE_MASTER_KEY",
+            "threadbridge.master.key",
+            null
+    );
+
     private final long expiredCleanupDelayMillis = 10_000;
+
     private String getConfig(String environmentName, String propertyName, String defaultValue) {
         String environmentValue = System.getenv(environmentName);
 
@@ -61,7 +68,6 @@ public class AppConfig {
 
         return defaultValue;
     }
-
     public String getApplicationName() {
         return applicationName;
     }
@@ -151,4 +157,14 @@ public class AppConfig {
     public int getOutboxQueueCapacity() {return outboxQueueCapacity;}
 
     public int getOutboxProcessingTimeoutSeconds() {return outboxProcessingTimeoutSeconds;}
+
+    public String getMasterKey() {
+        if (masterKey == null || masterKey.isBlank()) {
+            throw new IllegalStateException(
+                    "Master key is not configured. Set THREADBRIDGE_MASTER_KEY"
+            );
+        }
+
+        return masterKey;
+    }
 }

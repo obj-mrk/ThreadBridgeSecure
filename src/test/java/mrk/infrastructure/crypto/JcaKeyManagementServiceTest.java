@@ -3,6 +3,7 @@ package mrk.infrastructure.crypto;
 import mrk.application.port.KeyManagementService;
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.PrivateKey;
@@ -12,6 +13,20 @@ import java.util.Base64;
 import static org.junit.jupiter.api.Assertions.*;
 
 class JcaKeyManagementServiceTest {
+    private static final String TEST_MASTER_KEY = Base64.getEncoder()
+            .encodeToString(
+                    "0123456789abcdef0123456789abcdef"
+                            .getBytes(StandardCharsets.UTF_8)
+            );
+
+    private KeyManagementService createService() {
+        return new JcaKeyManagementService(
+                new RsaPemKeyParser(),
+                TEST_MASTER_KEY
+        );
+    }
+
+    KeyManagementService keyManagementService;
 
     @Test
     void shouldParsePublicKeyFromPem() throws Exception {
@@ -19,9 +34,6 @@ class JcaKeyManagementServiceTest {
 
         String publicKeyPem = toPublicKeyPem(keyPair.getPublic());
 
-        KeyManagementService keyManagementService = new JcaKeyManagementService(
-                new RsaPemKeyParser()
-        );
 
         PublicKey parsedPublicKey = keyManagementService.parsePublicKey(publicKeyPem);
 
@@ -35,11 +47,6 @@ class JcaKeyManagementServiceTest {
         KeyPair keyPair = generateRsaKeyPair();
 
         String privateKeyPem = toPrivateKeyPem(keyPair.getPrivate());
-
-        KeyManagementService keyManagementService = new JcaKeyManagementService(
-                new RsaPemKeyParser()
-        );
-
         PrivateKey parsedPrivateKey = keyManagementService.parsePrivateKey(privateKeyPem);
 
         assertNotNull(parsedPrivateKey);
@@ -49,10 +56,6 @@ class JcaKeyManagementServiceTest {
 
     @Test
     void shouldFailOnInvalidPublicKeyPem() {
-        KeyManagementService keyManagementService = new JcaKeyManagementService(
-                new RsaPemKeyParser()
-        );
-
         String invalidPem = """
                 -----BEGIN PUBLIC KEY-----
                 INVALID_KEY_DATA
@@ -92,5 +95,50 @@ class JcaKeyManagementServiceTest {
                 %s
                 -----END PRIVATE KEY-----
                 """.formatted(encoded);
+    }
+
+    @Test
+    void shouldEncryptAndDecryptPrivateKey() throws Exception {
+        KeyPair keyPair = generateRsaKeyPair();
+        String privateKeyPem = toPrivateKeyPem(keyPair.getPrivate());
+
+        KeyManagementService service = createService();
+
+        String encrypted = service.encryptPrivateKey(privateKeyPem);
+        String decrypted = service.decryptPrivateKey(encrypted);
+
+        assertNotEquals(privateKeyPem, encrypted);
+        assertFalse(encrypted.contains("BEGIN PRIVATE KEY"));
+        assertEquals(privateKeyPem, decrypted);
+    }
+
+    @Test
+    void shouldValidateMatchingKeyPair() throws Exception {
+        KeyPair keyPair = generateRsaKeyPair();
+
+        KeyManagementService service = createService();
+
+        assertDoesNotThrow(() ->
+                service.validateKeyPair(
+                        toPublicKeyPem(keyPair.getPublic()),
+                        toPrivateKeyPem(keyPair.getPrivate())
+                )
+        );
+    }
+
+    @Test
+    void shouldRejectDifferentKeyPair() throws Exception {
+        KeyPair first = generateRsaKeyPair();
+        KeyPair second = generateRsaKeyPair();
+
+        KeyManagementService service = createService();
+
+        assertThrows(
+                CryptoException.class,
+                () -> service.validateKeyPair(
+                        toPublicKeyPem(first.getPublic()),
+                        toPrivateKeyPem(second.getPrivate())
+                )
+        );
     }
 }

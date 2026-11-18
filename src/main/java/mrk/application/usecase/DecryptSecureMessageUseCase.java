@@ -100,14 +100,18 @@ public class DecryptSecureMessageUseCase {
 
     private String decryptMessage(SecureMessage message, UserKey recipientKey) {
         // Криптографию выполняем без открытой транзакции.
-        PrivateKey privateKey = keyManagementService.parsePrivateKey(
-                recipientKey.getEncryptedPrivateKeyPem()
-        );
+            String privateKeyPem = keyManagementService.decryptPrivateKey(
+                    recipientKey.getEncryptedPrivateKeyPem()
+            );
 
-        return hybridEncryptionService.decrypt(
-                toEncryptedPayload(message),
-                privateKey
-        );
+            PrivateKey privateKey = keyManagementService.parsePrivateKey(
+                    privateKeyPem
+            );
+
+            return hybridEncryptionService.decrypt(
+                    toEncryptedPayload(message),
+                    privateKey
+            );
     }
 
     private void finishDecrypt(DecryptSecureMessageCommand command) {
