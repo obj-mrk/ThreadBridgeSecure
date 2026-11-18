@@ -2,10 +2,12 @@ package mrk.http.handler;
 
 import com.sun.net.httpserver.HttpExchange;
 import mrk.application.command.RegisterUserKeyCommand;
+import mrk.application.exception.AuthenticationException;
 import mrk.application.exception.ConflictException;
 import mrk.application.exception.NotFoundException;
 import mrk.application.exception.ValidationException;
 import mrk.application.result.RegisterUserKeyResult;
+import mrk.application.service.UserAuthenticationService;
 import mrk.application.usecase.RegisterUserKeyUseCase;
 import mrk.http.request.RegisterUserKeyRequest;
 import mrk.http.response.ErrorResponse;
@@ -17,10 +19,12 @@ import java.io.IOException;
 public class UserKeyHandler extends BaseHttpHandler {
     private final JsonUtils jsonUtils;
     private final RegisterUserKeyUseCase registerUserKeyUseCase;
+    private final UserAuthenticationService userAuthenticationService;
 
-    public UserKeyHandler(JsonUtils jsonUtils, RegisterUserKeyUseCase registerUserKeyUseCase) {
+    public UserKeyHandler(JsonUtils jsonUtils, RegisterUserKeyUseCase registerUserKeyUseCase, UserAuthenticationService userAuthenticationService) {
         this.jsonUtils = jsonUtils;
         this.registerUserKeyUseCase = registerUserKeyUseCase;
+        this.userAuthenticationService = userAuthenticationService;
     }
 
     @Override
@@ -55,6 +59,8 @@ public class UserKeyHandler extends BaseHttpHandler {
             );
 
             sendJson(exchange, 201, jsonUtils.toJson(response));
+        } catch (AuthenticationException exception) {
+            sendJson(exchange, 401, jsonUtils.toJson(new ErrorResponse("ERROR", "Invalid authentication credentials")));
         } catch (ValidationException exception) {
             sendJson(exchange, 400, jsonUtils.toJson(new ErrorResponse("ERROR", exception.getMessage())));
         } catch (NotFoundException exception) {

@@ -10,16 +10,21 @@ import java.util.Optional;
 public class JdbcUserRepository implements UserRepository {
 
     @Override
-    public long save(Connection connection, User user) {
+    public long save(Connection connection, User user, String apiTokenHash) {
         String sql = """
-                INSERT INTO users (username, status)
-                VALUES (?, ?)
-                RETURNING id
-                """;
+            INSERT INTO users (
+                username,
+                status,
+                api_token_hash
+            )
+            VALUES (?, ?, ?)
+            RETURNING id
+            """;
 
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, user.getUsername());
             statement.setString(2, user.getStatus().name());
+            statement.setString(3, apiTokenHash);
 
             try (ResultSet resultSet = statement.executeQuery()) {
                 if (!resultSet.next()) {
@@ -60,6 +65,30 @@ public class JdbcUserRepository implements UserRepository {
                 """;
 
         return findUser(connection, userId, sql);
+    }
+
+    @Override
+    public Optional<Long> findActiveUserIdByApiTokenHash(Connection connection, String apiTokenHash) {
+        String sql = """
+            SELECT id
+            FROM users
+            WHERE api_token_hash = ?
+              AND status = 'ACTIVE'
+            """;
+
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, apiTokenHash);
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (!resultSet.next()) {
+                    return Optional.empty();
+                }
+
+                return Optional.of(resultSet.getLong("id"));
+            }
+        } catch (SQLException exception) {
+            throw new RuntimeException("Could not authenticate user", exception);
+        }
     }
 
     @Override

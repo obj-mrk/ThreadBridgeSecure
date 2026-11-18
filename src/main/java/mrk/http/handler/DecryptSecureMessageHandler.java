@@ -2,9 +2,11 @@ package mrk.http.handler;
 
 import com.sun.net.httpserver.HttpExchange;
 import mrk.application.command.DecryptSecureMessageCommand;
+import mrk.application.exception.AuthenticationException;
 import mrk.application.exception.NotFoundException;
 import mrk.application.exception.ValidationException;
 import mrk.application.result.DecryptedMessageResult;
+import mrk.application.service.UserAuthenticationService;
 import mrk.application.usecase.DecryptSecureMessageUseCase;
 import mrk.http.response.DecryptedMessageResponse;
 import mrk.http.response.ErrorResponse;
@@ -13,17 +15,17 @@ import mrk.utils.JsonUtils;
 import java.io.IOException;
 
 public class DecryptSecureMessageHandler extends BaseHttpHandler {
-    private static final String USER_ID_HEADER = "X-User-Id";
-
     private final JsonUtils jsonUtils;
     private final DecryptSecureMessageUseCase decryptSecureMessageUseCase;
+    private final UserAuthenticationService userAuthenticationService;
 
     public DecryptSecureMessageHandler(
             JsonUtils jsonUtils,
-            DecryptSecureMessageUseCase decryptSecureMessageUseCase
+            DecryptSecureMessageUseCase decryptSecureMessageUseCase, UserAuthenticationService userAuthenticationService
     ) {
         this.jsonUtils = jsonUtils;
         this.decryptSecureMessageUseCase = decryptSecureMessageUseCase;
+        this.userAuthenticationService = userAuthenticationService;
     }
 
     @Override
@@ -35,7 +37,7 @@ public class DecryptSecureMessageHandler extends BaseHttpHandler {
             }
 
             long messageId = extractMessageId(exchange.getRequestURI().getPath());
-            long recipientId = extractUserId(exchange);
+            long recipientId = userAuthenticationService.authenticate(extractBearerToken(exchange));
 
             DecryptSecureMessageCommand command = new DecryptSecureMessageCommand(
                     messageId,
@@ -53,6 +55,8 @@ public class DecryptSecureMessageHandler extends BaseHttpHandler {
             );
 
             sendJson(exchange, 200, jsonUtils.toJson(response));
+        } catch (AuthenticationException exception) {
+            sendJson(exchange, 401, jsonUtils.toJson(new ErrorResponse("ERROR", "Invalid authentication credentials")));
         } catch (NotFoundException exception) {
             sendJson(exchange, 404, jsonUtils.toJson(new ErrorResponse("ERROR", exception.getMessage())));
         } catch (ValidationException exception) {
@@ -83,26 +87,6 @@ public class DecryptSecureMessageHandler extends BaseHttpHandler {
             return messageId;
         } catch (NumberFormatException exception) {
             throw new ValidationException("Message id must be a number");
-        }
-    }
-
-    private long extractUserId(HttpExchange exchange) {
-        String value = exchange.getRequestHeaders().getFirst(USER_ID_HEADER);
-
-        if (value == null || value.isBlank()) {
-            throw new ValidationException("X-User-Id header is required");
-        }
-
-        try {
-            long userId = Long.parseLong(value.trim());
-
-            if (userId <= 0) {
-                throw new ValidationException("X-User-Id must be positive");
-            }
-
-            return userId;
-        } catch (NumberFormatException exception) {
-            throw new ValidationException("X-User-Id must be a number");
         }
     }
 }

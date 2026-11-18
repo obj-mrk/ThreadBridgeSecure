@@ -2,7 +2,8 @@ CREATE TABLE users (
                        id BIGSERIAL PRIMARY KEY,
                        username VARCHAR(100) NOT NULL UNIQUE,
                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                       status VARCHAR(30) NOT NULL
+                       status VARCHAR(30) NOT NULL,
+                       api_token_hash VARCHAR(64) UNIQUE NULL
 );
 
 CREATE TABLE user_keys (

@@ -2,9 +2,7 @@ package mrk.bootstrap;
 
 import com.sun.net.httpserver.HttpServer;
 import mrk.application.port.*;
-import mrk.application.service.DecryptPermissionPolicy;
-import mrk.application.service.SecureMessageAuditFactory;
-import mrk.application.service.SecureMessageOutboxFactory;
+import mrk.application.service.*;
 import mrk.application.usecase.*;
 import mrk.config.AppConfig;
 import mrk.http.HttpServerFactory;
@@ -67,12 +65,21 @@ public class DependencyFactory {
 
         KeyFingerprintCalculator keyFingerprintCalculator = new KeyFingerprintCalculator();
 
+        ApiTokenService apiTokenService = new ApiTokenService();
+
+        UserAuthenticationService userAuthenticationService = new UserAuthenticationService(
+                transactionManager,
+                userRepository,
+                apiTokenService
+        );
+
         SecureInboxCache secureInboxCache = new ReaderWriterSecureInboxCache();
 
         // UseCase
         RegisterUserUseCase registerUserUseCase = new RegisterUserUseCase(
                 transactionManager,
-                userRepository
+                userRepository,
+                apiTokenService
         );
 
         RegisterUserKeyUseCase registerUserKeyUseCase = new RegisterUserKeyUseCase(
@@ -203,20 +210,26 @@ public class DependencyFactory {
 
         UserKeyHandler userKeyHandler = new UserKeyHandler(
                 jsonUtils,
-                registerUserKeyUseCase);
+                registerUserKeyUseCase,
+                userAuthenticationService
+        );
 
         SecureMessageWebhookHandler secureMessageWebhookHandler = new SecureMessageWebhookHandler(
                 jsonUtils,
-                acceptSecureMessageUseCase);
+                acceptSecureMessageUseCase,
+                userAuthenticationService
+        );
 
         SecureInboxHandler secureInboxHandler = new SecureInboxHandler(
                 jsonUtils,
-                getSecureInboxUseCase
+                getSecureInboxUseCase,
+                userAuthenticationService
         );
 
         DecryptSecureMessageHandler decryptSecureMessageHandler = new DecryptSecureMessageHandler(
                 jsonUtils,
-                decryptSecureMessageUseCase
+                decryptSecureMessageUseCase,
+                userAuthenticationService
         );
 
         // Http

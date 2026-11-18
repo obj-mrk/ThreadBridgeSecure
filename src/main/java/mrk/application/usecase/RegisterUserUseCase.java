@@ -6,39 +6,54 @@ import mrk.application.exception.ValidationException;
 import mrk.application.port.TransactionManager;
 import mrk.application.port.UserRepository;
 import mrk.application.result.RegisterUserResult;
+import mrk.application.service.ApiTokenService;
 import mrk.domain.model.User;
-import mrk.domain.value.UserStatus;
 
 import java.time.LocalDateTime;
 
 public class RegisterUserUseCase {
+
     private final TransactionManager transactionManager;
     private final UserRepository userRepository;
+    private final ApiTokenService apiTokenService;
 
     public RegisterUserUseCase(
             TransactionManager transactionManager,
-            UserRepository userRepository
+            UserRepository userRepository,
+            ApiTokenService apiTokenService
     ) {
         this.transactionManager = transactionManager;
         this.userRepository = userRepository;
+        this.apiTokenService = apiTokenService;
     }
 
     public RegisterUserResult register(RegisterUserCommand command) {
         validate(command);
+
+        String apiToken = apiTokenService.generateToken();
+        String apiTokenHash = apiTokenService.hash(apiToken);
 
         return transactionManager.execute(connection -> {
             if (userRepository.existsByUsername(connection, command.getUsername())) {
                 throw new ConflictException("Username already exists");
             }
 
-            User user = User.register(command.getUsername(), LocalDateTime.now());
+            User user = User.register(
+                    command.getUsername(),
+                    LocalDateTime.now()
+            );
 
-            long userId = userRepository.save(connection, user);
+            long userId = userRepository.save(
+                    connection,
+                    user,
+                    apiTokenHash
+            );
 
             return new RegisterUserResult(
                     userId,
                     user.getUsername(),
-                    user.getStatus().name()
+                    user.getStatus().name(),
+                    apiToken
             );
         });
     }

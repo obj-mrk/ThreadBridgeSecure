@@ -45,7 +45,8 @@ public class UserHandler extends BaseHttpHandler {
             RegisterUserResponse response = new RegisterUserResponse(
                     "CREATED",
                     result.getUserId(),
-                    result.getUsername()
+                    result.getUsername(),
+                    result.getApiToken()
             );
 
             sendJson(exchange, 201, jsonUtils.toJson(response));
