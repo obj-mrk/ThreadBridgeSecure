@@ -151,6 +151,31 @@ public class JdbcSecureMessageRepository implements SecureMessageRepository {
     }
 
     @Override
+    public Optional<SecureMessage> findByIdForRecipient(Connection connection, long messageId, long recipientId) {
+        String sql = """
+            SELECT *
+            FROM secure_messages
+            WHERE id = ?
+              AND recipient_id = ?
+            """;
+
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, messageId);
+            statement.setLong(2, recipientId);
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (!resultSet.next()) {
+                    return Optional.empty();
+                }
+
+                return Optional.of(mapSecureMessage(resultSet));
+            }
+        } catch (SQLException exception) {
+            throw new RuntimeException("Could not load secure message", exception);
+        }
+    }
+
+    @Override
     public ExpiredBatchResult markExpiredBatch(Connection connection, int batchSize) {
         String sql = """
             WITH expired AS (

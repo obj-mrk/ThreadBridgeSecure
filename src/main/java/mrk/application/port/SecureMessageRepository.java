@@ -17,6 +17,8 @@ public interface SecureMessageRepository {
 
     Optional<SecureMessage> findByIdForRecipientForUpdate(Connection connection, long messageId, long recipientId);
 
+    Optional<SecureMessage> findByIdForRecipient(Connection connection, long messageId, long recipientId);
+
     ExpiredBatchResult markExpiredBatch(Connection connection, int batchSize);
 
     void markRead(Connection connection, long messageId);

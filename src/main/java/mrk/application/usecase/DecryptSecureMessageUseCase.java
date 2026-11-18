@@ -19,7 +19,6 @@ import mrk.domain.model.SecureMessage;
 import mrk.domain.model.UserKey;
 
 import java.security.PrivateKey;
-import java.sql.Connection;
 import java.time.LocalDateTime;
 
 public class DecryptSecureMessageUseCase {
@@ -62,55 +61,63 @@ public class DecryptSecureMessageUseCase {
     public DecryptedMessageResult decrypt(DecryptSecureMessageCommand command) {
         validateCommand(command);
 
-        return transactionManager.execute(connection -> {
+        try {
+            SecureMessage message = loadMessage(command);
+            decryptPermissionPolicy.checkCanDecrypt(message, LocalDateTime.now());
+
+            UserKey recipientKey = loadRecipientKey(message, command.getRecipientId());
+            String plaintext = decryptMessage(message, recipientKey);
+
+            finishDecrypt(command);
+
+            return new DecryptedMessageResult(
+                    message.getId(),
+                    message.getSenderId(),
+                    plaintext,
+                    message.isOneTime()
+            );
+        } catch (NotFoundException | ValidationException exception) {
+            auditDecryptDeniedSafely(command, exception.getMessage());
+            throw exception;
+        }
+    }
+
+    private SecureMessage loadMessage(DecryptSecureMessageCommand command) {
+        return transactionManager.execute(connection ->
+                secureMessageRepository
+                        .findByIdForRecipient(connection, command.getMessageId(), command.getRecipientId())
+                        .orElseThrow(() -> new NotFoundException("Secure message not found"))
+        );
+    }
+
+    private UserKey loadRecipientKey(SecureMessage message, long recipientId) {
+        return transactionManager.execute(connection ->
+                userKeyRepository
+                        .findByIdForUser(connection, message.getRecipientKeyId(), recipientId)
+                        .orElseThrow(() -> new ValidationException("Recipient key not found"))
+        );
+    }
+
+    private String decryptMessage(SecureMessage message, UserKey recipientKey) {
+        // Криптографию выполняем без открытой транзакции.
+        PrivateKey privateKey = keyManagementService.parsePrivateKey(
+                recipientKey.getEncryptedPrivateKeyPem()
+        );
+
+        return hybridEncryptionService.decrypt(
+                toEncryptedPayload(message),
+                privateKey
+        );
+    }
+
+    private void finishDecrypt(DecryptSecureMessageCommand command) {
+        transactionManager.execute(connection -> {
+            // Повторно проверяем состояние под блокировкой.
             SecureMessage message = secureMessageRepository
-                    .findByIdForRecipientForUpdate(
-                            connection,
-                            command.getMessageId(),
-                            command.getRecipientId()
-                    )
-                    .orElseThrow(() -> {
-                        auditDecryptDenied(
-                                connection,
-                                command.getRecipientId(),
-                                command.getMessageId(),
-                                "Secure message not found or access denied"
-                        );
-                        return new NotFoundException("Secure message not found");
-                    });
+                    .findByIdForRecipientForUpdate(connection, command.getMessageId(), command.getRecipientId())
+                    .orElseThrow(() -> new NotFoundException("Secure message not found"));
 
-            try {
-                decryptPermissionPolicy.checkCanDecrypt(message, LocalDateTime.now());
-            } catch (ValidationException exception) {
-                auditDecryptDenied(
-                        connection,
-                        command.getRecipientId(),
-                        message.getId(),
-                        exception.getMessage()
-                );
-                throw exception;
-            }
-
-            UserKey recipientKey = userKeyRepository
-                    .findActiveByUserId(connection, command.getRecipientId())
-                    .orElseThrow(() -> {
-                        auditDecryptDenied(
-                                connection,
-                                command.getRecipientId(),
-                                message.getId(),
-                                "Recipient active key not found"
-                        );
-                        return new ValidationException("Recipient active key not found");
-                    });
-
-            PrivateKey privateKey = keyManagementService.parsePrivateKey(
-                    recipientKey.getEncryptedPrivateKeyPem()
-            );
-
-            String plaintext = hybridEncryptionService.decrypt(
-                    toEncryptedPayload(message),
-                    privateKey
-            );
+            decryptPermissionPolicy.checkCanDecrypt(message, LocalDateTime.now());
 
             if (message.isOneTime()) {
                 secureMessageRepository.markDestroyed(connection, message.getId());
@@ -128,13 +135,27 @@ public class DecryptSecureMessageUseCase {
                     outboxFactory.messageRead(message)
             );
 
-            return new DecryptedMessageResult(
-                    message.getId(),
-                    message.getSenderId(),
-                    plaintext,
-                    message.isOneTime()
-            );
+            return null;
         });
+    }
+
+    private void auditDecryptDeniedSafely(DecryptSecureMessageCommand command, String reason) {
+        try {
+            transactionManager.execute(connection -> {
+                auditEventRepository.save(
+                        connection,
+                        auditFactory.decryptDenied(
+                                command.getRecipientId(),
+                                command.getMessageId(),
+                                reason
+                        )
+                );
+
+                return null;
+            });
+        } catch (RuntimeException ignored) {
+            // Ошибка audit не должна скрывать исходную причину отказа.
+        }
     }
 
     private void validateCommand(DecryptSecureMessageCommand command) {
@@ -157,18 +178,6 @@ public class DecryptSecureMessageUseCase {
                 message.getEncryptedContentKey(),
                 message.getNonce(),
                 message.getAlgorithm()
-        );
-    }
-
-    private void auditDecryptDenied(
-            Connection connection,
-            long actorUserId,
-            long messageId,
-            String reason
-    ) {
-        auditEventRepository.save(
-                connection,
-                auditFactory.decryptDenied(actorUserId, messageId, reason)
         );
     }
 }
