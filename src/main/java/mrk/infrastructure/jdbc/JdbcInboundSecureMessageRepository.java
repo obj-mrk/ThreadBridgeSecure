@@ -13,20 +13,21 @@ import java.util.Optional;
 public class JdbcInboundSecureMessageRepository implements InboundSecureMessageRepository {
 
     @Override
-    public long save(Connection connection, InboundSecureMessage message) {
+    public Optional<Long> saveIfAbsent(Connection connection, InboundSecureMessage message) {
         String sql = """
-                INSERT INTO inbound_secure_messages (
-                    request_id,
-                    sender_id,
-                    recipient_id,
-                    plaintext_payload,
-                    ttl_seconds,
-                    one_time,
-                    status
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                RETURNING id
-                """;
+            INSERT INTO inbound_secure_messages (
+                request_id,
+                sender_id,
+                recipient_id,
+                plaintext_payload,
+                ttl_seconds,
+                one_time,
+                status
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (request_id) DO NOTHING
+            RETURNING id
+            """;
 
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, message.getRequestId());
@@ -39,10 +40,10 @@ public class JdbcInboundSecureMessageRepository implements InboundSecureMessageR
 
             try (ResultSet resultSet = statement.executeQuery()) {
                 if (resultSet.next()) {
-                    return resultSet.getLong("id");
+                    return Optional.of(resultSet.getLong("id"));
                 }
 
-                throw new IllegalStateException("Inbound secure message was not inserted");
+                return Optional.empty();
             }
         } catch (SQLException exception) {
             throw new RuntimeException("Could not save inbound secure message", exception);
@@ -80,25 +81,6 @@ public class JdbcInboundSecureMessageRepository implements InboundSecureMessageR
             }
         } catch (SQLException exception) {
             throw new RuntimeException("Could not find inbound secure message by request id", exception);
-        }
-    }
-
-    @Override
-    public boolean existsByRequestId(Connection connection, String requestId) {
-        String sql = """
-                SELECT 1
-                FROM inbound_secure_messages
-                WHERE request_id = ?
-                """;
-
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, requestId);
-
-            try (ResultSet resultSet = statement.executeQuery()) {
-                return resultSet.next();
-            }
-        } catch (SQLException exception) {
-            throw new RuntimeException("Could not check inbound secure message existence", exception);
         }
     }
 

@@ -15,7 +15,10 @@ import mrk.domain.value.AuditEventType;
 import mrk.domain.value.InboundMessageStatus;
 import mrk.domain.value.UserStatus;
 
+import java.util.Optional;
+
 public class AcceptSecureMessageUseCase {
+
     private final TransactionManager transactionManager;
     private final UserRepository userRepository;
     private final InboundSecureMessageRepository inboundSecureMessageRepository;
@@ -27,7 +30,8 @@ public class AcceptSecureMessageUseCase {
     public AcceptSecureMessageUseCase(
             TransactionManager transactionManager,
             UserRepository userRepository,
-            InboundSecureMessageRepository inboundSecureMessageRepository, AuditEventRepository auditEventRepository,
+            InboundSecureMessageRepository inboundSecureMessageRepository,
+            AuditEventRepository auditEventRepository,
             int maxMessageLength,
             int minTtlSeconds,
             int maxTtlSeconds
@@ -44,53 +48,67 @@ public class AcceptSecureMessageUseCase {
     public AcceptSecureMessageResult accept(AcceptSecureMessageCommand command) {
         validateCommand(command);
 
+        String requestId = command.getRequestId().trim();
+
         return transactionManager.execute(connection -> {
-            return inboundSecureMessageRepository
-                    .findByRequestId(connection, command.getRequestId())
-                    .map(existing -> new AcceptSecureMessageResult(
-                            existing.getId(),
-                            existing.getRequestId(),
-                            true
-                    ))
-                    .orElseGet(() -> {
-                        User sender = userRepository.findById(connection, command.getSenderId())
-                                .orElseThrow(() -> new NotFoundException("Sender not found"));
+            Optional<InboundSecureMessage> existingMessage = inboundSecureMessageRepository.findByRequestId(connection, requestId);
 
-                        User recipient = userRepository.findById(connection, command.getRecipientId())
-                                .orElseThrow(() -> new NotFoundException("Recipient not found"));
+            if (existingMessage.isPresent()) {
+                return duplicateResult(existingMessage.get());
+            }
 
-                        validateUserIsActive(sender, "Sender is not active");
-                        validateUserIsActive(recipient, "Recipient is not active");
+            User sender = userRepository.findById(connection, command.getSenderId())
+                    .orElseThrow(() -> new NotFoundException("Sender not found"));
 
-                        InboundSecureMessage message = new InboundSecureMessage();
-                        message.setRequestId(command.getRequestId().trim());
-                        message.setSenderId(command.getSenderId());
-                        message.setRecipientId(command.getRecipientId());
-                        message.setPlaintextPayload(command.getText());
-                        message.setTtlSeconds(command.getTtlSeconds());
-                        message.setOneTime(command.isOneTime());
-                        message.setStatus(InboundMessageStatus.RECEIVED);
+            User recipient = userRepository.findById(connection, command.getRecipientId())
+                    .orElseThrow(() -> new NotFoundException("Recipient not found"));
 
-                        long inboundMessageId = inboundSecureMessageRepository.save(connection, message);
+            validateUserIsActive(sender, "Sender is not active");
+            validateUserIsActive(recipient, "Recipient is not active");
 
-                        auditEventRepository.save(
-                                connection,
-                                AuditEvent.of(
-                                        command.getSenderId(),
-                                        AuditEventType.INBOUND_ACCEPTED,
-                                        "InboundSecureMessage",
-                                        inboundMessageId,
-                                        "Recipient=" + command.getRecipientId()
-                                )
-                        );
+            InboundSecureMessage message = new InboundSecureMessage();
+            message.setRequestId(requestId);
+            message.setSenderId(command.getSenderId());
+            message.setRecipientId(command.getRecipientId());
+            message.setPlaintextPayload(command.getText());
+            message.setTtlSeconds(command.getTtlSeconds());
+            message.setOneTime(command.isOneTime());
+            message.setStatus(InboundMessageStatus.RECEIVED);
 
-                        return new AcceptSecureMessageResult(
-                                inboundMessageId,
-                                command.getRequestId(),
-                                false
-                        );
-                    });
+            Optional<Long> inboundMessageId = inboundSecureMessageRepository.saveIfAbsent(connection, message);
+
+            if (inboundMessageId.isEmpty()) {
+                InboundSecureMessage duplicate = inboundSecureMessageRepository.findByRequestId(connection, requestId)
+                        .orElseThrow(() -> new IllegalStateException("Duplicate inbound secure message was not found"));
+
+                return duplicateResult(duplicate);
+            }
+
+            auditEventRepository.save(
+                    connection,
+                    AuditEvent.of(
+                            command.getSenderId(),
+                            AuditEventType.INBOUND_ACCEPTED,
+                            "InboundSecureMessage",
+                            inboundMessageId.get(),
+                            "Recipient=" + command.getRecipientId()
+                    )
+            );
+
+            return new AcceptSecureMessageResult(
+                    inboundMessageId.get(),
+                    requestId,
+                    false
+            );
         });
+    }
+
+    private AcceptSecureMessageResult duplicateResult(InboundSecureMessage message) {
+        return new AcceptSecureMessageResult(
+                message.getId(),
+                message.getRequestId(),
+                true
+        );
     }
 
     private void validateCommand(AcceptSecureMessageCommand command) {
@@ -102,7 +120,7 @@ public class AcceptSecureMessageUseCase {
             throw new ValidationException("Request id must not be blank");
         }
 
-        if (command.getRequestId().length() > 150) {
+        if (command.getRequestId().trim().length() > 150) {
             throw new ValidationException("Request id is too long");
         }
 
