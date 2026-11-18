@@ -180,6 +180,7 @@ public class DependencyFactory {
 
         OutboxEventWorkerPool outboxEventWorkerPool = new OutboxEventWorkerPool(
                 appConfig.getOutboxWorkerThreads(),
+                appConfig.getOutboxQueueCapacity(),
                 transactionManager,
                 outboxEventRepository,
                 eventDispatcher
@@ -190,7 +191,8 @@ public class DependencyFactory {
                 outboxEventRepository,
                 outboxEventWorkerPool,
                 appConfig.getOutboxPollBatchSize(),
-                appConfig.getOutboxPollDelayMillis()
+                appConfig.getOutboxPollDelayMillis(),
+                appConfig.getOutboxProcessingTimeoutSeconds()
         );
 
         // Handler

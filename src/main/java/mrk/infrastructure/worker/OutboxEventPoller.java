@@ -12,6 +12,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class OutboxEventPoller implements AutoCloseable {
+
     private static final Logger log = LoggerFactory.getLogger(OutboxEventPoller.class);
 
     private final TransactionManager transactionManager;
@@ -20,14 +21,9 @@ public class OutboxEventPoller implements AutoCloseable {
     private final ScheduledExecutorService scheduler;
     private final int batchSize;
     private final long delayMillis;
+    private final int processingTimeoutSeconds;
 
-    public OutboxEventPoller(
-            TransactionManager transactionManager,
-            OutboxEventRepository outboxEventRepository,
-            OutboxEventWorkerPool outboxEventWorkerPool,
-            int batchSize,
-            long delayMillis
-    ) {
+    public OutboxEventPoller(TransactionManager transactionManager, OutboxEventRepository outboxEventRepository, OutboxEventWorkerPool outboxEventWorkerPool, int batchSize, long delayMillis, int processingTimeoutSeconds) {
         if (batchSize <= 0) {
             throw new IllegalArgumentException("Batch size must be positive");
         }
@@ -36,11 +32,17 @@ public class OutboxEventPoller implements AutoCloseable {
             throw new IllegalArgumentException("Delay millis must be positive");
         }
 
+        if (processingTimeoutSeconds <= 0) {
+            throw new IllegalArgumentException("Processing timeout must be positive");
+        }
+
         this.transactionManager = transactionManager;
         this.outboxEventRepository = outboxEventRepository;
         this.outboxEventWorkerPool = outboxEventWorkerPool;
         this.batchSize = batchSize;
         this.delayMillis = delayMillis;
+        this.processingTimeoutSeconds = processingTimeoutSeconds;
+
         this.scheduler = Executors.newSingleThreadScheduledExecutor(
                 new NamedThreadFactory("outbox-poller")
         );
@@ -65,7 +67,11 @@ public class OutboxEventPoller implements AutoCloseable {
 
     private void poll() {
         List<OutboxEvent> claimedEvents = transactionManager.execute(connection ->
-                outboxEventRepository.claimNewBatch(connection, batchSize)
+                outboxEventRepository.claimProcessableBatch(
+                        connection,
+                        batchSize,
+                        processingTimeoutSeconds
+                )
         );
 
         for (OutboxEvent event : claimedEvents) {

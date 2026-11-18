@@ -24,8 +24,6 @@ public class AppConfig {
             null
     );
 
-
-
     private final int httpWorkerThreads = 8;
     
     private final int maxSecureMessageLength = 10_000;
@@ -40,12 +38,14 @@ public class AppConfig {
     private final int inboundProcessingTimeoutSeconds = 30;
 
     private final int outboxWorkerThreads = 2;
+    private final int outboxQueueCapacity = 8;
     private final int outboxPollBatchSize = 10;
     private final int outboxPollDelayMillis = 1_000;
+    private final int outboxProcessingTimeoutSeconds = 30;
 
     private final int expiredCleanupBatchSize = 50;
-    private final long expiredCleanupDelayMillis = 10_000;
 
+    private final long expiredCleanupDelayMillis = 10_000;
     private String getConfig(String environmentName, String propertyName, String defaultValue) {
         String environmentValue = System.getenv(environmentName);
 
@@ -61,8 +61,6 @@ public class AppConfig {
 
         return defaultValue;
     }
-
-
 
     public String getApplicationName() {
         return applicationName;
@@ -149,4 +147,8 @@ public class AppConfig {
     public int getCryptoQueueCapacity() {return cryptoQueueCapacity;}
 
     public int getInboundProcessingTimeoutSeconds() {return inboundProcessingTimeoutSeconds;}
+
+    public int getOutboxQueueCapacity() {return outboxQueueCapacity;}
+
+    public int getOutboxProcessingTimeoutSeconds() {return outboxProcessingTimeoutSeconds;}
 }

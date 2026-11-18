@@ -46,11 +46,18 @@ public class JdbcOutboxEventRepository implements OutboxEventRepository {
     }
 
     @Override
-    public List<OutboxEvent> claimNewBatch(Connection connection, int batchSize) {
+    public List<OutboxEvent> claimProcessableBatch(Connection connection, int batchSize, int processingTimeoutSeconds) {
         String selectSql = """
             SELECT *
             FROM outbox_events
             WHERE status = 'NEW'
+               OR (
+                    status = 'PROCESSING'
+                    AND (
+                        processing_started_at IS NULL
+                        OR processing_started_at < CURRENT_TIMESTAMP - (? * INTERVAL '1 second')
+                    )
+               )
             ORDER BY created_at
             FOR UPDATE SKIP LOCKED
             LIMIT ?
@@ -68,7 +75,8 @@ public class JdbcOutboxEventRepository implements OutboxEventRepository {
             List<OutboxEvent> events = new ArrayList<>();
 
             try (PreparedStatement selectStatement = connection.prepareStatement(selectSql)) {
-                selectStatement.setInt(1, batchSize);
+                selectStatement.setInt(1, processingTimeoutSeconds);
+                selectStatement.setInt(2, batchSize);
 
                 try (ResultSet resultSet = selectStatement.executeQuery()) {
                     while (resultSet.next()) {
@@ -81,6 +89,7 @@ public class JdbcOutboxEventRepository implements OutboxEventRepository {
                 for (OutboxEvent event : events) {
                     updateStatement.setLong(1, event.getId());
                     updateStatement.addBatch();
+
                     event.setStatus(OutboxEventStatus.PROCESSING);
                 }
 

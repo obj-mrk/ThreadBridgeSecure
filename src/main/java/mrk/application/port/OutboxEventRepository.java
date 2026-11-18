@@ -8,7 +8,7 @@ import java.util.List;
 public interface OutboxEventRepository {
     long save(Connection connection, OutboxEvent event);
 
-    List<OutboxEvent> claimNewBatch(Connection connection, int batchSize);
+    List<OutboxEvent> claimProcessableBatch(Connection connection, int batchSize, int processingTimeoutSeconds);
 
     void markProcessed(Connection connection, long eventId);
 
